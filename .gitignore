@@ -1,0 +1,13 @@
+.idea/
+**/.idea/
+**/target/
+
+local-keys/
+**/private-key.pem
+**/*.p12
+**/*.jks
+
+.env
+**/application-local.properties
+
+.DS_Store

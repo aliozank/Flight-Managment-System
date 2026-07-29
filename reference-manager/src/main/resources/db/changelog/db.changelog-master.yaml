@@ -1,0 +1,19 @@
+databaseChangeLog:
+
+  - include:
+      file: db/changelog/changes/001-create-airlines.xml
+
+  - include:
+      file: db/changelog/changes/002-create-airports.xml
+
+  - include:
+      file: db/changelog/changes/003-create-aircraft-types.xml
+
+  - include:
+      file: db/changelog/changes/004-create-aircrafts.xml
+
+  - include:
+      file: db/changelog/changes/005-create-routes.xml
+
+  - include:
+      file: db/changelog/changes/006-create-flight-types.xml
