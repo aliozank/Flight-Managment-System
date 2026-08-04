@@ -1,0 +1,18 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/changes/001-create-users-and-roles.xml
+
+  - include:
+      file: db/changelog/changes/002-insert-default-roles.xml
+
+  - include:
+      file: db/changelog/changes/003-create-activity-logs.xml
+
+  - include:
+      file: db/changelog/changes/004-fix-activity-log-success-type.xml
+
+  - include:
+      file: db/changelog/changes/005-create-flights.xml
+
+  - include:
+      file: db/changelog/changes/006-create-flight-versions.xml

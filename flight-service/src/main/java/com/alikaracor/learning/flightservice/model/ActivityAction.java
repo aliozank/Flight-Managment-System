@@ -1,0 +1,18 @@
+package com.alikaracor.learning.flightservice.model;
+
+public enum ActivityAction {
+
+    LOGIN_SUCCESS,
+    LOGIN_FAILED,
+    USER_CREATED,
+    USER_UPDATED,
+    FLIGHT_CREATED,
+    FLIGHT_CREATE_FAILED,
+    FLIGHT_UPDATED,
+    FLIGHT_UPDATE_FAILED,
+    CSV_IMPORTED,
+    USER_CREATE_FAILED,
+    USER_UPDATE_FAILED,
+    FLIGHT_CANCEL_FAILED,
+    FLIGHT_CANCELED,
+}

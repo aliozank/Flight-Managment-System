@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+        http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-5.0.xsd">
+
+    <changeSet id="002-1" author="alikaracor">
+
+        <insert tableName="roles">
+            <column name="role_name" value="ADMIN"/>
+            <column name="role_description" value="Sistem yöneticisi"/>
+            <column name="created_at"
+                    valueComputed="CURRENT_TIMESTAMP(6)"/>
+        </insert>
+
+        <insert tableName="roles">
+            <column name="role_name" value="OPERATIONS"/>
+            <column name="role_description" value="Uçuş operasyonlarını yönetir"/>
+            <column name="created_at"
+                    valueComputed="CURRENT_TIMESTAMP(6)"/>
+        </insert>
+
+        <insert tableName="roles">
+            <column name="role_name" value="BI_ANALYST"/>
+            <column name="role_description" value="Raporlama ve analiz işlemlerini gerçekleştirir"/>
+            <column name="created_at"
+                    valueComputed="CURRENT_TIMESTAMP(6)"/>
+        </insert>
+
+        <insert tableName="roles">
+            <column name="role_name" value="DEVOPS"/>
+            <column name="role_description" value="Sistem operasyonlarını ve altyapıyı yönetir"/>
+            <column name="created_at"
+                    valueComputed="CURRENT_TIMESTAMP(6)"/>
+        </insert>
+
+    </changeSet>
+
+</databaseChangeLog>

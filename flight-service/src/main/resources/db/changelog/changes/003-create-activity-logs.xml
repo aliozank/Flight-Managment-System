@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+        http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-5.0.xsd">
+
+    <changeSet id="003-1" author="alikaracor">
+
+        <createTable tableName="activity_logs">
+
+            <column
+                    name="activity_log_id"
+                    type="BIGINT"
+                    autoIncrement="true">
+                <constraints
+                        primaryKey="true"
+                        primaryKeyName="pk_activity_logs"
+                        nullable="false"/>
+            </column>
+
+            <column name="actor_user_id" type="BIGINT"/>
+
+            <column name="activity_action" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="activity_resource_type" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="resource_id" type="BIGINT"/>
+
+            <column name="success" type="BOOLEAN">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="failure_reason" type="VARCHAR(1000)"/>
+
+            <column name="ip_address" type="VARCHAR(45)"/>
+
+            <column name="created_at" type="DATETIME(6)">
+                <constraints nullable="false"/>
+            </column>
+
+        </createTable>
+
+        <createIndex tableName="activity_logs" indexName="idx_activity_logs_actor_user_id">
+            <column name="actor_user_id"/>
+        </createIndex>
+
+        <createIndex tableName="activity_logs" indexName="idx_activity_logs_resource">
+            <column name="activity_resource_type"/>
+            <column name="resource_id"/>
+        </createIndex>
+
+        <createIndex tableName="activity_logs" indexName="idx_activity_logs_created_at">
+            <column name="created_at"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

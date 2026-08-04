@@ -180,4 +180,18 @@ public class RouteService {
         publisher.publish(referenceEvent);
 
     }
+
+    public RouteResponse getActiveRouteByAirports(Long originAirportId, Long destinationAirportId) {
+
+        Route route = routeRepository.findByOriginAirport_AirportIdAndDestinationAirport_AirportIdAndRouteStatus(
+                originAirportId,
+                destinationAirportId,
+                RouteStatus.ACTIVE)
+                .orElseThrow(()-> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Bu havalimanları arasında aktif bir rota bulunamadı"));
+
+        return routeMapper.toRouteResponse(route);
+
+    }
+
 }

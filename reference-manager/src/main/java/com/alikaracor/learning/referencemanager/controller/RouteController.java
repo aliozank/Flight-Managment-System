@@ -4,6 +4,7 @@ import com.alikaracor.learning.referencemanager.dto.RouteRequest;
 import com.alikaracor.learning.referencemanager.dto.RouteResponse;
 import com.alikaracor.learning.referencemanager.service.RouteService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
@@ -46,4 +47,12 @@ public class RouteController {
     public void deactivateRouteById(@PathVariable Long routeId) {
         routeService.deactiveRouteById(routeId);
     }
+
+    @GetMapping("/by-airports")
+    public RouteResponse getActiveRoutesByAirport(@RequestParam Long originAirportId, @RequestParam Long destinationAirportId) {
+
+        return routeService.getActiveRouteByAirports(originAirportId, destinationAirportId);
+
+    }
+
 }
