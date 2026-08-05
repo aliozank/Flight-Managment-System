@@ -1,55 +1,45 @@
-package com.alikaracor.learning.flightservice.dto;
+package com.alikaracor.learning.flight_archive_service.dto;
 
-import jakarta.validation.constraints.*;
+
+import com.alikaracor.learning.flight_archive_service.model.FlightStatus;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.UUID;
 
-@Setter
 @Getter
+@Setter
 @NoArgsConstructor
-public class FlightCreateRequest {
+public class ArchivedFlightResponse {
 
-    @NotBlank
-    @Pattern(
-            regexp = "^[A-Z0-9]{2}\\d{4}$",
-            message = "Flight number 2 adet büyük harf ve 4 adet rakamdan olmuşmalıdır"
-    )
+    private Long archiveId;
+    private UUID eventId;
+
+    private Long flightId;
     private String flightNumber;
 
-    @NotNull
-    @Positive
     private Long airlineId;
-
-    @Positive
     private Long aircraftId;
-
-    @NotNull
-    @Positive
     private Long aircraftTypeId;
 
-    @NotNull
-    @Positive
     private Long originAirportId;
-
-    @NotNull
-    @Positive
     private Long destinationAirportId;
-
-    @NotNull
-    @Positive
     private Long flightTypeId;
 
-    @NotNull
     private LocalDate flightDate;
-
-    @NotNull
     private LocalTime scheduledDepartureTime;
-
-    @NotNull
     private LocalTime scheduledArrivalTime;
 
+    private FlightStatus flightStatus;
+    private Integer flightVersion;
+    private Long changedByUserId;
+
+    private Instant eventOccurredAt;
+    private Instant archivedAt;
 }
+
+

@@ -10,6 +10,7 @@ import com.alikaracor.learning.flightservice.model.FlightChangeType;
 import com.alikaracor.learning.flightservice.model.FlightStatus;
 import com.alikaracor.learning.flightservice.model.FlightVersion;
 import com.alikaracor.learning.flightservice.publisher.FlightEventPublisher;
+import com.alikaracor.learning.flightservice.publisher.FlightWebSocketPublisher;
 import com.alikaracor.learning.flightservice.repository.FlightRepository;
 import com.alikaracor.learning.flightservice.repository.FlightVersionRepository;
 import jakarta.transaction.Transactional;
@@ -29,15 +30,17 @@ public class FlightService {
     private final FlightReferenceValidationService flightReferenceValidationService;
     private final ActivityLogService activityLogService;
     private final FlightEventPublisher flightEventPublisher;
+    private final FlightWebSocketPublisher flightWebSocketPublisher;
 
 
-    public FlightService(FlightRepository flightRepository, FlightVersionRepository flightVersionRepository, FlightMapper flightMapper, FlightReferenceValidationService flightReferenceValidationService, ActivityLogService activityLogService, FlightEventPublisher flightEventPublisher) {
+    public FlightService(FlightRepository flightRepository, FlightVersionRepository flightVersionRepository, FlightMapper flightMapper, FlightReferenceValidationService flightReferenceValidationService, ActivityLogService activityLogService, FlightEventPublisher flightEventPublisher, FlightWebSocketPublisher flightWebSocketPublisher) {
         this.flightRepository = flightRepository;
         this.flightVersionRepository = flightVersionRepository;
         this.flightMapper = flightMapper;
         this.flightReferenceValidationService = flightReferenceValidationService;
         this.activityLogService = activityLogService;
         this.flightEventPublisher = flightEventPublisher;
+        this.flightWebSocketPublisher = flightWebSocketPublisher;
     }
 
     public List<FlightResponse> getAllFlights() {
@@ -94,7 +97,11 @@ public class FlightService {
 
             flightEventPublisher.publish(savedFlight, FlightEventType.CREATED, actorUserId);
 
-            return flightMapper.toFlightResponse(savedFlight);
+            FlightResponse flightResponse = flightMapper.toFlightResponse(savedFlight);
+
+            flightWebSocketPublisher.publish(flightResponse);
+
+            return flightResponse;
 
         } catch (RuntimeException exception) {
 
@@ -160,7 +167,12 @@ public class FlightService {
 
             flightEventPublisher.publish(updateFlight, FlightEventType.UPDATED, actorUserId);
 
-            return flightMapper.toFlightResponse(updateFlight);
+            FlightResponse flightResponse = flightMapper.toFlightResponse(updateFlight);
+
+            flightWebSocketPublisher.publish(flightResponse);
+
+            return flightResponse;
+
         } catch (RuntimeException exception) {
 
             String failureReason = "Flight update failed";
@@ -229,6 +241,10 @@ public class FlightService {
             activityLogService.logFlightCancel(actorUserId, cancelFlight.getFlightId(), ipAddress);
 
             flightEventPublisher.publish(cancelFlight, FlightEventType.CANCELLED, actorUserId);
+
+            FlightResponse flightResponse = flightMapper.toFlightResponse(cancelFlight);
+
+            flightWebSocketPublisher.publish(flightResponse);
 
         } catch (RuntimeException exception) {
             String failureReason = "Flight cancellation failed";

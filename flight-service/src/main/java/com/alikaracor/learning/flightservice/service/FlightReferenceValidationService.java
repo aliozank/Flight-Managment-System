@@ -47,7 +47,7 @@ public class FlightReferenceValidationService {
 
         if (!"OPERATIONAL".equalsIgnoreCase(airport.getAirportStatus())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Airport status is not ACTIVE");
+                    "Airport status is not OPERATIONAL");
         }
     }
 

@@ -5,6 +5,9 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.util.Arrays;
+import java.util.List;
+
 @Component
 public class ReferenceManagerClient {
 
@@ -77,6 +80,39 @@ public class ReferenceManagerClient {
                         .build())
                 .retrieve()
                 .body(RouteReferenceResponse.class);
+    }
+
+    public List<AircraftReferenceResponse> getAllAircrafts(){
+
+        AircraftReferenceResponse[] aircrafts = referenceManagerRestClient.get()
+                .uri("/api/aircrafts")
+                .retrieve()
+                .body(AircraftReferenceResponse[].class);
+
+        return Arrays.asList(aircrafts);
+
+    }
+
+    public List<RouteReferenceResponse> getAllRoutes(){
+
+        RouteReferenceResponse[] routes = referenceManagerRestClient.get()
+                .uri("/api/routes")
+                .retrieve()
+                .body(RouteReferenceResponse[].class);
+
+        return Arrays.asList(routes);
+
+    }
+
+    public List<FlightTypeReferenceResponse> getAllFlightTypes(){
+
+        FlightTypeReferenceResponse[] flightTypes = referenceManagerRestClient.get()
+                .uri("/api/flight-types")
+                .retrieve()
+                .body(FlightTypeReferenceResponse[].class);
+
+        return Arrays.asList(flightTypes);
+
     }
 
 }

@@ -13,5 +13,6 @@ public class AirlineReferenceResponse implements Serializable {
 
     private Long airlineId;
     private String airlineStatus;
+    private String airlineIataCode;
 
 }

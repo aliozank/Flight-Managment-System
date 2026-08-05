@@ -57,6 +57,8 @@ public class SecurityConfig {
 
                         .requestMatchers("/api/**").denyAll()
 
+                        .requestMatchers("/ws" ,"/ws/**").permitAll()
+
                         .anyRequest().denyAll()
                 )
 
