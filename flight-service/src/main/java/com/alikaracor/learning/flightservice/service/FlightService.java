@@ -19,7 +19,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class FlightService {
@@ -28,16 +32,18 @@ public class FlightService {
     private final FlightVersionRepository flightVersionRepository;
     private final FlightMapper flightMapper;
     private final FlightReferenceValidationService flightReferenceValidationService;
+    private final AircraftScheduleConflictValidationService aircraftScheduleConflictValidationService;
     private final ActivityLogService activityLogService;
     private final FlightEventPublisher flightEventPublisher;
     private final FlightWebSocketPublisher flightWebSocketPublisher;
 
 
-    public FlightService(FlightRepository flightRepository, FlightVersionRepository flightVersionRepository, FlightMapper flightMapper, FlightReferenceValidationService flightReferenceValidationService, ActivityLogService activityLogService, FlightEventPublisher flightEventPublisher, FlightWebSocketPublisher flightWebSocketPublisher) {
+    public FlightService(FlightRepository flightRepository, FlightVersionRepository flightVersionRepository, FlightMapper flightMapper, FlightReferenceValidationService flightReferenceValidationService, AircraftScheduleConflictValidationService aircraftScheduleConflictValidationService, ActivityLogService activityLogService, FlightEventPublisher flightEventPublisher, FlightWebSocketPublisher flightWebSocketPublisher) {
         this.flightRepository = flightRepository;
         this.flightVersionRepository = flightVersionRepository;
         this.flightMapper = flightMapper;
         this.flightReferenceValidationService = flightReferenceValidationService;
+        this.aircraftScheduleConflictValidationService = aircraftScheduleConflictValidationService;
         this.activityLogService = activityLogService;
         this.flightEventPublisher = flightEventPublisher;
         this.flightWebSocketPublisher = flightWebSocketPublisher;
@@ -76,8 +82,16 @@ public class FlightService {
 
         }
 
+
         try {
             flightReferenceValidationService.validateCreateRequest(flightCreateRequest);
+
+            aircraftScheduleConflictValidationService.validateAircraftScheduleForCreate(
+                    flightCreateRequest.getAircraftId(),
+                    flightCreateRequest.getFlightDate(),
+                    flightCreateRequest.getScheduledDepartureTime(),
+                    flightCreateRequest.getScheduledArrivalTime()
+            );
 
             Flight newFlight = flightMapper.toFlight(flightCreateRequest);
 
@@ -148,6 +162,14 @@ public class FlightService {
         try {
 
             flightReferenceValidationService.validateUpdateRequest(flightUpdateRequest);
+
+            aircraftScheduleConflictValidationService.validateAircraftScheduleForUpdate(
+                    flightId,
+                    flightUpdateRequest.getAircraftId(),
+                    flightUpdateRequest.getFlightDate(),
+                    flightUpdateRequest.getScheduledDepartureTime(),
+                    flightUpdateRequest.getScheduledArrivalTime()
+            );
 
             flightMapper.updateFlight(flightUpdateRequest, updateFlight);
 

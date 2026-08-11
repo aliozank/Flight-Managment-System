@@ -1,0 +1,8 @@
+target/
+.idea/
+.git/
+*.iml
+.DS_Store
+.env
+application-local.properties
+**/private-key.pem

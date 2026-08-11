@@ -52,6 +52,9 @@ class FlightServiceTest {
     private FlightReferenceValidationService flightReferenceValidationService;
 
     @Mock
+    private AircraftScheduleConflictValidationService aircraftScheduleConflictValidationService;
+
+    @Mock
     private ActivityLogService activityLogService;
 
     @Mock
@@ -186,6 +189,12 @@ class FlightServiceTest {
         when(flightRepository.existsByFlightNumberAndFlightDate(createRequest.getFlightNumber(), createRequest.getFlightDate()))
                 .thenReturn(false);
         doNothing().when(flightReferenceValidationService).validateCreateRequest(createRequest);
+        doNothing().when(aircraftScheduleConflictValidationService).validateAircraftScheduleForCreate(
+                createRequest.getAircraftId(),
+                createRequest.getFlightDate(),
+                createRequest.getScheduledDepartureTime(),
+                createRequest.getScheduledArrivalTime()
+        );
         when(flightMapper.toFlight(createRequest)).thenReturn(sampleFlight);
         when(flightRepository.save(any(Flight.class))).thenReturn(sampleFlight);
         when(flightMapper.toFlightVersion(sampleFlight)).thenReturn(mockVersion);
@@ -198,6 +207,12 @@ class FlightServiceTest {
         assertThat(response.getFlightId()).isEqualTo(1L);
 
         verify(flightReferenceValidationService).validateCreateRequest(createRequest);
+        verify(aircraftScheduleConflictValidationService).validateAircraftScheduleForCreate(
+                createRequest.getAircraftId(),
+                createRequest.getFlightDate(),
+                createRequest.getScheduledDepartureTime(),
+                createRequest.getScheduledArrivalTime()
+        );
         verify(flightRepository).save(sampleFlight);
         verify(flightVersionRepository).save(mockVersion);
         verify(activityLogService).logFlightCreated(actorUserId, 1L, ipAddress);
@@ -238,6 +253,31 @@ class FlightServiceTest {
         verify(flightWebSocketPublisher, never()).publish(any());
     }
 
+    @Test
+    @DisplayName("addFlight - Aircraft zamanlaması çakışması olduğunda 409 fırlatılmalı, save/event/WebSocket yapılmamalıdır")
+    void addFlight_shouldThrowConflictAndNotSave_whenAircraftScheduleConflicts() {
+        when(flightRepository.existsByFlightNumberAndFlightDate(createRequest.getFlightNumber(), createRequest.getFlightDate()))
+                .thenReturn(false);
+        doNothing().when(flightReferenceValidationService).validateCreateRequest(createRequest);
+        doThrow(new ResponseStatusException(HttpStatus.CONFLICT, "Aircraft is occupied during this time window"))
+                .when(aircraftScheduleConflictValidationService).validateAircraftScheduleForCreate(
+                        createRequest.getAircraftId(),
+                        createRequest.getFlightDate(),
+                        createRequest.getScheduledDepartureTime(),
+                        createRequest.getScheduledArrivalTime()
+                );
+
+        assertThatThrownBy(() -> flightService.addFlight(createRequest, actorUserId, ipAddress))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
+                .isEqualTo(HttpStatus.CONFLICT);
+
+        verify(activityLogService).logFlightCreateFailure(actorUserId, "Aircraft is occupied during this time window", ipAddress);
+        verify(flightRepository, never()).save(any());
+        verify(flightEventPublisher, never()).publish(any(), any(), any());
+        verify(flightWebSocketPublisher, never()).publish(any());
+    }
+
     // ==================== updateFlight Tests ====================
 
     @Test
@@ -249,6 +289,13 @@ class FlightServiceTest {
         when(flightRepository.existsByFlightNumberAndFlightDateAndFlightIdNot("TK1234", LocalDate.of(2026, 10, 1), 1L))
                 .thenReturn(false);
         doNothing().when(flightReferenceValidationService).validateUpdateRequest(updateRequest);
+        doNothing().when(aircraftScheduleConflictValidationService).validateAircraftScheduleForUpdate(
+                1L,
+                updateRequest.getAircraftId(),
+                updateRequest.getFlightDate(),
+                updateRequest.getScheduledDepartureTime(),
+                updateRequest.getScheduledArrivalTime()
+        );
         doNothing().when(flightMapper).updateFlight(updateRequest, sampleFlight);
         when(flightRepository.save(sampleFlight)).thenReturn(sampleFlight);
         when(flightMapper.toFlightVersion(sampleFlight)).thenReturn(mockVersion);
@@ -261,6 +308,13 @@ class FlightServiceTest {
         assertThat(sampleFlight.getFlightVersion()).isEqualTo(2);
 
         verify(flightReferenceValidationService).validateUpdateRequest(updateRequest);
+        verify(aircraftScheduleConflictValidationService).validateAircraftScheduleForUpdate(
+                1L,
+                updateRequest.getAircraftId(),
+                updateRequest.getFlightDate(),
+                updateRequest.getScheduledDepartureTime(),
+                updateRequest.getScheduledArrivalTime()
+        );
         verify(flightRepository).save(sampleFlight);
         verify(flightVersionRepository).save(mockVersion);
         verify(activityLogService).logFlightUpdated(actorUserId, 1L, ipAddress);
@@ -315,6 +369,33 @@ class FlightServiceTest {
 
         verify(activityLogService).logFlightUpdateFailure(actorUserId, 1L, "Route status is not ACTIVE", ipAddress);
         verify(flightRepository, never()).save(any());
+        verify(flightWebSocketPublisher, never()).publish(any());
+    }
+
+    @Test
+    @DisplayName("updateFlight - Aircraft zamanlaması çakışması olduğunda 409 fırlatılmalı, save/event/WebSocket yapılmamalıdır")
+    void updateFlight_shouldThrowConflictAndNotSave_whenAircraftScheduleConflicts() {
+        when(flightRepository.findById(1L)).thenReturn(Optional.of(sampleFlight));
+        when(flightRepository.existsByFlightNumberAndFlightDateAndFlightIdNot("TK1234", LocalDate.of(2026, 10, 1), 1L))
+                .thenReturn(false);
+        doNothing().when(flightReferenceValidationService).validateUpdateRequest(updateRequest);
+        doThrow(new ResponseStatusException(HttpStatus.CONFLICT, "Aircraft is occupied during this time window"))
+                .when(aircraftScheduleConflictValidationService).validateAircraftScheduleForUpdate(
+                        1L,
+                        updateRequest.getAircraftId(),
+                        updateRequest.getFlightDate(),
+                        updateRequest.getScheduledDepartureTime(),
+                        updateRequest.getScheduledArrivalTime()
+                );
+
+        assertThatThrownBy(() -> flightService.updateFlight(1L, updateRequest, actorUserId, ipAddress))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
+                .isEqualTo(HttpStatus.CONFLICT);
+
+        verify(activityLogService).logFlightUpdateFailure(actorUserId, 1L, "Aircraft is occupied during this time window", ipAddress);
+        verify(flightRepository, never()).save(any());
+        verify(flightEventPublisher, never()).publish(any(), any(), any());
         verify(flightWebSocketPublisher, never()).publish(any());
     }
 

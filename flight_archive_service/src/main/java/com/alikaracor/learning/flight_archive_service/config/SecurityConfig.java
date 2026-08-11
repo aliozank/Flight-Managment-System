@@ -23,6 +23,7 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers("/actuator/prometheus").permitAll()
 
                         .requestMatchers(HttpMethod.GET, "/api/archived-flights/**")
                         .hasAnyRole("ADMIN", "OPERATIONS", "BI_ANALYST")

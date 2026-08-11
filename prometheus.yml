@@ -1,0 +1,22 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "reference-manager"
+    metrics_path: "/actuator/prometheus"
+    static_configs:
+      - targets:
+          - "reference-manager:8081"
+
+  - job_name: "flight-service"
+    metrics_path: "/actuator/prometheus"
+    static_configs:
+      - targets:
+          - "flight-service:8082"
+
+  - job_name: "flight-archive-service"
+    metrics_path: "/actuator/prometheus"
+    static_configs:
+      - targets:
+          - "flight-archive-service:8083"
