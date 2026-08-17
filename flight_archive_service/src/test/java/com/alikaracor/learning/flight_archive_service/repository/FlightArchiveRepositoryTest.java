@@ -47,6 +47,9 @@ class FlightArchiveRepositoryTest {
         flight.setFlightDate(LocalDate.of(2026, 10, 1));
         flight.setScheduledDepartureTime(LocalTime.of(10, 0));
         flight.setScheduledArrivalTime(LocalTime.of(12, 0));
+        flight.setScheduledArrivalDate(LocalDate.of(2026, 10, 1));
+        flight.setScheduledDepartureAt(Instant.parse("2026-10-01T10:00:00Z"));
+        flight.setScheduledArrivalAt(Instant.parse("2026-10-01T12:00:00Z"));
         flight.setFlightStatus(FlightStatus.ARRIVED);
         flight.setFlightVersion(1);
         flight.setEventOccurredAt(Instant.now());

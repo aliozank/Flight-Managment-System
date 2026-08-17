@@ -8,13 +8,14 @@ import StatusTag from '@/components/common/StatusTag.vue'
 import FlightFormModal from '@/components/flight/FlightFormModal.vue'
 import FlightCsvUploadModal from '@/components/flight/FlightCsvUploadModal.vue'
 import MockGeneratorModal from '@/components/flight/MockGeneratorModal.vue'
-import type { FlightResponse, FlightCreateRequest, FlightUpdateRequest } from '@/types/flight'
+import type { FlightResponse, FlightCreateRequest, FlightUpdateRequest, FlightStatus } from '@/types/flight'
 
 const authStore = useAuthStore()
 const referenceStore = useReferenceStore()
 const flightStore = useFlightStore()
 
 const formModalVisible = ref(false)
+const formSaving = ref(false)
 const selectedFlightToEdit = ref<FlightResponse | null>(null)
 const csvModalVisible = ref(false)
 const mockModalVisible = ref(false)
@@ -37,20 +38,81 @@ const handleOpenEditModal = (flight: FlightResponse) => {
 }
 
 const handleSaveCreate = async (payload: FlightCreateRequest) => {
+  if (formSaving.value) return
+
+  formSaving.value = true
   try {
     await flightStore.createFlight(payload)
     ElMessage.success('Yeni uçuş başarıyla oluşturuldu')
+    formModalVisible.value = false
   } catch {
     // Handled in axios interceptor
+  } finally {
+    formSaving.value = false
   }
 }
 
 const handleSaveUpdate = async ({ id, data }: { id: number; data: FlightUpdateRequest }) => {
+  if (formSaving.value) return
+
+  formSaving.value = true
   try {
     await flightStore.updateFlight(id, data)
     ElMessage.success('Uçuş başarıyla güncellendi')
+    formModalVisible.value = false
   } catch {
     // Handled in axios interceptor
+  } finally {
+    formSaving.value = false
+  }
+}
+
+const statusLabels: Record<FlightStatus, string> = {
+  SCHEDULED: 'Planlandı',
+  DELAYED: 'Rötarlı',
+  DEPARTED: 'Kalktı',
+  ARRIVED: 'İndi',
+  CANCELLED: 'İptal Edildi'
+}
+
+const getAllowedStatusTransitions = (status: FlightStatus): FlightStatus[] => {
+  switch (status) {
+    case 'SCHEDULED':
+      return ['DELAYED', 'DEPARTED']
+    case 'DELAYED':
+      return ['SCHEDULED', 'DEPARTED']
+    case 'DEPARTED':
+      return ['ARRIVED']
+    case 'ARRIVED':
+    case 'CANCELLED':
+      return []
+  }
+}
+
+const canEditFlight = (status: FlightStatus) => status === 'SCHEDULED' || status === 'DELAYED'
+
+const canCancelFlight = (status: FlightStatus) => status === 'SCHEDULED' || status === 'DELAYED'
+
+const handleStatusCommand = async (flight: FlightResponse, command: string | number | object) => {
+  const targetStatus = command as FlightStatus
+
+  try {
+    await ElMessageBox.confirm(
+      `#${flight.flightNumber} uçuşu ${statusLabels[targetStatus]} durumuna geçirilsin mi?`,
+      'Durum Güncelleme Onayı',
+      {
+        confirmButtonText: 'Güncelle',
+        cancelButtonText: 'Vazgeç',
+        type: 'warning'
+      }
+    )
+
+    await flightStore.updateFlightStatus(flight.flightId, targetStatus)
+    ElMessage.success(`Uçuş durumu ${statusLabels[targetStatus]} olarak güncellendi`)
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      // API errors are handled by the axios interceptor.
+    }
   }
 }
 
@@ -217,7 +279,7 @@ const handleCancelFlight = (flight: FlightResponse) => {
           </template>
         </el-table-column>
 
-        <el-table-column label="Güzergah & Saat (STD ➔ STA)" min-width="210">
+        <el-table-column label="Güzergah & Saat (STD ➔ STA)" min-width="240">
           <template #default="{ row }">
             <div class="route-time-cell">
               <span class="route-codes">
@@ -225,6 +287,9 @@ const handleCancelFlight = (flight: FlightResponse) => {
               </span>
               <span class="time-range">
                 {{ row.scheduledDepartureTime?.substring(0, 5) }} - {{ row.scheduledArrivalTime?.substring(0, 5) }}
+              </span>
+              <span v-if="row.scheduledArrivalDate !== row.flightDate" class="date-range">
+                {{ row.flightDate }} ➔ {{ row.scheduledArrivalDate }}
               </span>
             </div>
           </template>
@@ -257,7 +322,7 @@ const handleCancelFlight = (flight: FlightResponse) => {
         <el-table-column
           v-if="authStore.canManageFlights"
           label="İşlemler"
-          width="160"
+          width="250"
           align="center"
         >
           <template #default="{ row }">
@@ -266,17 +331,39 @@ const handleCancelFlight = (flight: FlightResponse) => {
                 size="small"
                 type="primary"
                 class="action-btn-edit"
+                :disabled="!canEditFlight(row.flightStatus)"
                 @click="handleOpenEditModal(row)"
               >
                 Düzenle
               </el-button>
+
+              <el-dropdown
+                v-if="getAllowedStatusTransitions(row.flightStatus).length > 0"
+                trigger="click"
+                @command="handleStatusCommand(row, $event)"
+              >
+                <el-button size="small" type="warning" plain>
+                  Durum
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item
+                      v-for="status in getAllowedStatusTransitions(row.flightStatus)"
+                      :key="status"
+                      :command="status"
+                    >
+                      {{ statusLabels[status] }} ({{ status }})
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
 
               <el-button
                 v-if="authStore.canCancelFlight"
                 size="small"
                 type="danger"
                 class="action-btn-cancel"
-                :disabled="row.flightStatus === 'CANCELLED'"
+                :disabled="!canCancelFlight(row.flightStatus)"
                 @click="handleCancelFlight(row)"
               >
                 İptal
@@ -303,6 +390,7 @@ const handleCancelFlight = (flight: FlightResponse) => {
       v-if="formModalVisible"
       v-model:visible="formModalVisible"
       :flight-to-edit="selectedFlightToEdit"
+      :saving="formSaving"
       @save-create="handleSaveCreate"
       @save-update="handleSaveUpdate"
     />
@@ -397,6 +485,12 @@ const handleCancelFlight = (flight: FlightResponse) => {
 .time-range {
   font-size: 11px;
   color: #64748b;
+  font-weight: 600;
+}
+
+.date-range {
+  font-size: 10px;
+  color: #b45309;
   font-weight: 600;
 }
 

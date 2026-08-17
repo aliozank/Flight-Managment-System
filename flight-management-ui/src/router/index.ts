@@ -40,7 +40,7 @@ const router = createRouter({
           path: 'reference-data',
           name: 'reference-data',
           component: ReferenceDataView,
-          meta: { title: 'Referans Veriler' }
+          meta: { title: 'Referans Veriler', roles: ['ADMIN', 'OPERATIONS', 'BI_ANALYST'] }
         },
         {
           path: 'users',
@@ -64,7 +64,7 @@ const router = createRouter({
           path: 'monitoring',
           name: 'monitoring',
           component: MonitoringView,
-          meta: { title: 'Sistem İzleme' }
+          meta: { title: 'Sistem İzleme', roles: ['ADMIN', 'DEVOPS'] }
         }
       ]
     }

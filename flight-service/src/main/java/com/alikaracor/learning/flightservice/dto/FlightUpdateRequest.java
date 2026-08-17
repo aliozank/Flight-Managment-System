@@ -1,6 +1,5 @@
 package com.alikaracor.learning.flightservice.dto;
 
-import com.alikaracor.learning.flightservice.model.FlightStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -19,7 +18,7 @@ public class FlightUpdateRequest {
 
     @NotBlank
     @Pattern(
-            regexp = "^[A-Z]{2}\\d{4}$",
+            regexp = "^[A-Z0-9]{2}\\d{4}$",
             message = "Flight number 2 büyük harf ve 4 rakamdan oluşmalıdır"
     )
     private String flightNumber;
@@ -57,5 +56,5 @@ public class FlightUpdateRequest {
     private LocalTime scheduledArrivalTime;
 
     @NotNull
-    private FlightStatus flightStatus;
+    private LocalDate scheduledArrivalDate;
 }

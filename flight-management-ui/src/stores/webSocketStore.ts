@@ -100,23 +100,21 @@ export const useWebSocketStore = defineStore('webSocket', () => {
 
     const trySocket = (url: string) => {
       try {
-        ws = new WebSocket(url)
+        const socket = new WebSocket(url)
+        let wasConnected = false
+
+        ws = socket
 
         if (connectionTimeoutTimer) clearTimeout(connectionTimeoutTimer)
         connectionTimeoutTimer = setTimeout(() => {
-          if (ws && ws.readyState !== WebSocket.OPEN) {
-            ws.close()
-            if (!attemptedFallback) {
-              attemptedFallback = true
-              trySocket(fallbackWsUrl)
-            } else {
-              status.value = 'ERROR'
-            }
+          if (ws === socket && !wasConnected) {
+            socket.close()
           }
         }, 3000)
 
-        ws.onopen = () => {
-          if (connectionTimeoutTimer) clearTimeout(connectionTimeoutTimer)
+        socket.onopen = () => {
+          if (ws !== socket) return
+
           const connectFrame =
             `CONNECT\n` +
             `accept-version:1.2,1.1,1.0\n` +
@@ -124,19 +122,26 @@ export const useWebSocketStore = defineStore('webSocket', () => {
             `Authorization:Bearer ${authStore.token}\n\n` +
             `\x00`
 
-          ws?.send(connectFrame)
+          socket.send(connectFrame)
         }
 
-        ws.onmessage = (event) => {
+        socket.onmessage = (event) => {
+          if (ws !== socket) return
+
           const raw = event.data as string
           if (raw.startsWith('CONNECTED')) {
+            wasConnected = true
             status.value = 'CONNECTED'
+            if (connectionTimeoutTimer) {
+              clearTimeout(connectionTimeoutTimer)
+              connectionTimeoutTimer = null
+            }
             const subscribeFrame =
               `SUBSCRIBE\n` +
               `id:sub-0\n` +
               `destination:/topic/flights\n\n` +
               `\x00`
-            ws?.send(subscribeFrame)
+            socket.send(subscribeFrame)
           } else if (raw.startsWith('MESSAGE')) {
             const bodyIndex = raw.indexOf('\n\n')
             if (bodyIndex !== -1) {
@@ -147,8 +152,11 @@ export const useWebSocketStore = defineStore('webSocket', () => {
               try {
                 const flight: FlightResponse = JSON.parse(body)
                 const flightStore = useFlightStore()
-                flightStore.upsertFlightFromWebSocket(flight)
-                addNotification(flight)
+                const updated = flightStore.upsertFlightFromWebSocket(flight)
+
+                if (updated) {
+                  addNotification(flight)
+                }
               } catch {
                 // Silent parse fail
               }
@@ -156,20 +164,23 @@ export const useWebSocketStore = defineStore('webSocket', () => {
           }
         }
 
-        ws.onerror = () => {
-          if (!attemptedFallback) {
-            attemptedFallback = true
-            trySocket(fallbackWsUrl)
-          } else {
-            status.value = 'ERROR'
-          }
+        socket.onerror = () => {
+          if (ws !== socket) return
+
+          socket.close()
         }
 
-        ws.onclose = () => {
-          if (status.value === 'CONNECTED') {
-            status.value = 'DISCONNECTED'
-            scheduleReconnect()
-          } else if (!attemptedFallback) {
+        socket.onclose = () => {
+          if (ws !== socket) return
+
+          if (connectionTimeoutTimer) {
+            clearTimeout(connectionTimeoutTimer)
+            connectionTimeoutTimer = null
+          }
+
+          ws = null
+
+          if (!wasConnected && !attemptedFallback) {
             attemptedFallback = true
             trySocket(fallbackWsUrl)
           } else {
@@ -206,8 +217,9 @@ export const useWebSocketStore = defineStore('webSocket', () => {
       connectionTimeoutTimer = null
     }
     if (ws) {
-      ws.close()
+      const socket = ws
       ws = null
+      socket.close()
     }
     status.value = 'DISCONNECTED'
   }

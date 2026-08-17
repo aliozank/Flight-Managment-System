@@ -45,6 +45,8 @@ export const useAuthStore = defineStore('auth', () => {
   const canManageFlights = computed(() => isAdmin.value || isOperations.value)
   const canCancelFlight = computed(() => isAdmin.value)
   const canManageReferenceData = computed(() => isAdmin.value)
+  const canViewReferenceData = computed(() => isAdmin.value || isOperations.value || isBiAnalyst.value)
+  const canViewMonitoring = computed(() => isAdmin.value || isDevops.value)
   const canManageUsers = computed(() => isAdmin.value)
 
   const login = async (loginRequest: LoginRequest): Promise<void> => {
@@ -83,6 +85,8 @@ export const useAuthStore = defineStore('auth', () => {
     canManageFlights,
     canCancelFlight,
     canManageReferenceData,
+    canViewReferenceData,
+    canViewMonitoring,
     canManageUsers,
     hasRole,
     login,

@@ -163,7 +163,7 @@ class FlightReferenceValidationServiceTest {
     @Test
     @DisplayName("validateAircraft - aircraftId null olduğunda pas geçmelidir")
     void validateAircraft_shouldDoNothing_whenAircraftIdIsNull() {
-        assertThatCode(() -> validationService.validateAircraft(null, 20L))
+        assertThatCode(() -> validationService.validateAircraft(null, 20L, 10L))
                 .doesNotThrowAnyException();
 
         verifyNoInteractions(referenceManagerClient);
@@ -175,11 +175,12 @@ class FlightReferenceValidationServiceTest {
         AircraftReferenceResponse response = new AircraftReferenceResponse();
         response.setAircraftId(100L);
         response.setAircraftTypeId(20L);
+        response.setOperatorAirlineId(10L);
         response.setAircraftStatus("ACTIVE");
 
         when(referenceManagerClient.getAircraftById(100L)).thenReturn(response);
 
-        assertThatCode(() -> validationService.validateAircraft(100L, 20L))
+        assertThatCode(() -> validationService.validateAircraft(100L, 20L, 10L))
                 .doesNotThrowAnyException();
     }
 
@@ -193,7 +194,7 @@ class FlightReferenceValidationServiceTest {
 
         when(referenceManagerClient.getAircraftById(100L)).thenReturn(response);
 
-        assertThatThrownBy(() -> validationService.validateAircraft(100L, 20L))
+        assertThatThrownBy(() -> validationService.validateAircraft(100L, 20L, 10L))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
                 .isEqualTo(HttpStatus.BAD_REQUEST);
@@ -209,7 +210,7 @@ class FlightReferenceValidationServiceTest {
 
         when(referenceManagerClient.getAircraftById(100L)).thenReturn(response);
 
-        assertThatThrownBy(() -> validationService.validateAircraft(100L, 20L))
+        assertThatThrownBy(() -> validationService.validateAircraft(100L, 20L, 10L))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
                 .isEqualTo(HttpStatus.BAD_REQUEST);
@@ -263,19 +264,20 @@ class FlightReferenceValidationServiceTest {
     void validateCreateRequest_shouldValidateAllFieldsSuccessfully() {
         FlightCreateRequest request = new FlightCreateRequest();
         request.setAirlineId(10L);
+        request.setFlightNumber("TK1234");
         request.setAircraftTypeId(20L);
         request.setFlightTypeId(5L);
         request.setOriginAirportId(1L);
         request.setDestinationAirportId(2L);
         request.setAircraftId(100L);
 
-        AirlineReferenceResponse airline = new AirlineReferenceResponse(); airline.setAirlineStatus("ACTIVE");
+        AirlineReferenceResponse airline = new AirlineReferenceResponse(); airline.setAirlineStatus("ACTIVE"); airline.setAirlineIataCode("TK");
         AircraftTypeReferenceResponse type = new AircraftTypeReferenceResponse(); type.setAircraftTypeStatus("ACTIVE");
         FlightTypeReferenceResponse flightType = new FlightTypeReferenceResponse(); flightType.setFlightTypeStatus("ACTIVE");
         AirportReferenceResponse origin = new AirportReferenceResponse(); origin.setAirportStatus("OPERATIONAL");
         AirportReferenceResponse dest = new AirportReferenceResponse(); dest.setAirportStatus("OPERATIONAL");
         RouteReferenceResponse route = new RouteReferenceResponse(); route.setRouteStatus("ACTIVE");
-        AircraftReferenceResponse aircraft = new AircraftReferenceResponse(); aircraft.setAircraftStatus("ACTIVE"); aircraft.setAircraftTypeId(20L);
+        AircraftReferenceResponse aircraft = new AircraftReferenceResponse(); aircraft.setAircraftStatus("ACTIVE"); aircraft.setAircraftTypeId(20L); aircraft.setOperatorAirlineId(10L);
 
         when(referenceManagerClient.getAirlineById(10L)).thenReturn(airline);
         when(referenceManagerClient.getAircraftTypeById(20L)).thenReturn(type);
@@ -294,13 +296,14 @@ class FlightReferenceValidationServiceTest {
     void validateUpdateRequest_shouldValidateAllFieldsSuccessfully() {
         FlightUpdateRequest request = new FlightUpdateRequest();
         request.setAirlineId(10L);
+        request.setFlightNumber("TK1234");
         request.setAircraftTypeId(20L);
         request.setFlightTypeId(5L);
         request.setOriginAirportId(1L);
         request.setDestinationAirportId(2L);
         request.setAircraftId(null); // Optional aircraft
 
-        AirlineReferenceResponse airline = new AirlineReferenceResponse(); airline.setAirlineStatus("ACTIVE");
+        AirlineReferenceResponse airline = new AirlineReferenceResponse(); airline.setAirlineStatus("ACTIVE"); airline.setAirlineIataCode("TK");
         AircraftTypeReferenceResponse type = new AircraftTypeReferenceResponse(); type.setAircraftTypeStatus("ACTIVE");
         FlightTypeReferenceResponse flightType = new FlightTypeReferenceResponse(); flightType.setFlightTypeStatus("ACTIVE");
         AirportReferenceResponse origin = new AirportReferenceResponse(); origin.setAirportStatus("OPERATIONAL");

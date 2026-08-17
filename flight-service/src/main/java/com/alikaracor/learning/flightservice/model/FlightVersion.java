@@ -87,6 +87,16 @@ public class FlightVersion {
             updatable = false)
     private Instant flightVersionCreatedAt;
 
+    @Column(name = "scheduled_arrival_date", nullable = false)
+    private LocalDate scheduledArrivalDate;
+
+    @Column(name = "scheduled_departure_at", nullable = false)
+    private Instant scheduledDepartureAt;
+
+    @Column(name = "scheduled_arrival_at", nullable = false)
+    private Instant scheduledArrivalAt;
+
+
 
 
 

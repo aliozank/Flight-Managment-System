@@ -180,6 +180,10 @@ public class FlightCsvImportService {
                 LocalTime.parse(csvRecord.get("scheduledDepartureTime"))
         );
 
+        request.setScheduledArrivalDate(
+                LocalDate.parse(csvRecord.get("scheduledArrivalDate"))
+        );
+
         request.setScheduledArrivalTime(
                 LocalTime.parse(csvRecord.get("scheduledArrivalTime"))
         );

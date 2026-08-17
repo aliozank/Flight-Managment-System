@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-5.0.xsd">
+
+    <changeSet id="009-1" author="alikaracor">
+
+        <createIndex
+                tableName="flights"
+                indexName="idx_flights_status_departure_at">
+            <column name="flight_status"/>
+            <column name="scheduled_departure_at"/>
+        </createIndex>
+
+        <createIndex
+                tableName="flights"
+                indexName="idx_flights_status_arrival_at">
+            <column name="flight_status"/>
+            <column name="scheduled_arrival_at"/>
+        </createIndex>
+
+        <rollback>
+            <dropIndex
+                    tableName="flights"
+                    indexName="idx_flights_status_departure_at"/>
+            <dropIndex
+                    tableName="flights"
+                    indexName="idx_flights_status_arrival_at"/>
+        </rollback>
+
+    </changeSet>
+
+</databaseChangeLog>

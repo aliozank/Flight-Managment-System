@@ -180,9 +180,9 @@ public class AircraftService {
             return;
         }
 
-        aircraftRepository.save(aircraft);
-
         aircraft.setAircraftStatus(AircraftStatus.RETIRED);
+
+        aircraftRepository.save(aircraft);
 
         ReferenceEvent referenceEvent = new ReferenceEvent();
         referenceEvent.setEventId(UUID.randomUUID());

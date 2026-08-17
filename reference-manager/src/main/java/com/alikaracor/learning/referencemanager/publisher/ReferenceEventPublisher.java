@@ -3,11 +3,13 @@ package com.alikaracor.learning.referencemanager.publisher;
 import com.alikaracor.learning.referencemanager.event.ReferenceEvent;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Component
 public class ReferenceEventPublisher {
 
-   private static final String  Topic_Name = "reference.events";
+   private static final String Topic_Name = "reference.events";
 
    private final KafkaTemplate<String, ReferenceEvent> kafkaTemplate;
 
@@ -18,8 +20,23 @@ public class ReferenceEventPublisher {
 
    public void publish(ReferenceEvent referenceEvent) {
 
-      kafkaTemplate.send(Topic_Name, referenceEvent);
+      if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+         kafkaTemplate.send(Topic_Name, referenceEvent);
+         return;
+      }
+
+      TransactionSynchronizationManager.registerSynchronization(
+
+              new TransactionSynchronization() {
+
+                 @Override
+                 public void afterCommit() {
+
+                    kafkaTemplate.send(Topic_Name, referenceEvent);
+
+                 }
+
+              }
+      );
    }
-
-
 }

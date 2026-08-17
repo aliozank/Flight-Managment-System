@@ -3,6 +3,7 @@ package com.alikaracor.learning.flightservice.controller;
 import com.alikaracor.learning.flightservice.config.SecurityConfig;
 import com.alikaracor.learning.flightservice.dto.FlightResponse;
 import com.alikaracor.learning.flightservice.dto.MockFlightGenerationRequest;
+import com.alikaracor.learning.flightservice.dto.MockFlightGenerationResponse;
 import com.alikaracor.learning.flightservice.service.MockFlightGeneratorService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -45,8 +46,15 @@ class MockFlightGeneratorControllerTest {
         response.setFlightId(1L);
         response.setFlightNumber("TK1001");
 
+        MockFlightGenerationResponse generationResponse = new MockFlightGenerationResponse();
+        generationResponse.setRequestedCount(5);
+        generationResponse.setSuccessfulCount(1);
+        generationResponse.setFailedCount(0);
+        generationResponse.setSuccessfulFlights(List.of(response));
+        generationResponse.setErrors(List.of());
+
         when(mockFlightGeneratorService.generateFlights(any(MockFlightGenerationRequest.class), eq(100L), any()))
-                .thenReturn(List.of(response));
+                .thenReturn(generationResponse);
 
         String validJson = """
                 {
@@ -60,8 +68,11 @@ class MockFlightGeneratorControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validJson))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$[0].flightId").value(1L))
-                .andExpect(jsonPath("$[0].flightNumber").value("TK1001"));
+                .andExpect(jsonPath("$.requestedCount").value(5))
+                .andExpect(jsonPath("$.successfulCount").value(1))
+                .andExpect(jsonPath("$.failedCount").value(0))
+                .andExpect(jsonPath("$.successfulFlights[0].flightId").value(1L))
+                .andExpect(jsonPath("$.successfulFlights[0].flightNumber").value("TK1001"));
     }
 
     @Test

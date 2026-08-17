@@ -52,4 +52,7 @@ public class FlightCreateRequest {
     @NotNull
     private LocalTime scheduledArrivalTime;
 
+    @NotNull
+    private LocalDate scheduledArrivalDate;
+
 }

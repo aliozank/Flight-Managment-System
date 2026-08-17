@@ -3,9 +3,8 @@ package com.alikaracor.learning.flightservice.repository;
 import com.alikaracor.learning.flightservice.model.Flight;
 import com.alikaracor.learning.flightservice.model.FlightStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -15,17 +14,14 @@ public interface FlightRepository extends JpaRepository<Flight, Long> {
 
     boolean existsByFlightNumberAndFlightDateAndFlightIdNot(String flightNumber, LocalDate flightDate, Long flightId);
 
-    boolean existsByAircraftIdAndFlightDateAndFlightIdNot(Long aircraftId, LocalDate flightDate, Long flightId);
+    boolean existsByAircraftIdAndFlightStatusNotAndScheduledDepartureAtLessThanAndScheduledArrivalAtGreaterThan(Long aircraftId, FlightStatus cancelledStatus, Instant arrivalAt, Instant departureAt);
 
-    boolean existsByAircraftIdAndFlightDate(Long aircraftId, LocalDate flightDate);
+    boolean existsByAircraftIdAndFlightIdNotAndFlightStatusNotAndScheduledDepartureAtLessThanAndScheduledArrivalAtGreaterThan(Long aircraftId, Long flightId, FlightStatus cancelledStatus, Instant arrivalAt, Instant departureAt);
 
-    List<Flight> findByAircraftIdAndFlightDate(Long aircraftId, LocalDate flightDate);
+    List<Flight> findAllByFlightStatusInAndScheduledDepartureAtLessThanEqual(List<FlightStatus> flightStatuses, Instant scheduledDepartureAt);
 
-    @Query("SELECT f FROM Flight f WHERE f.aircraftId = :aircraftId AND f.flightDate = :flightDate AND f.flightStatus != :cancelledStatus")
-    List<Flight> findActiveFlightsByAircraftIdAndFlightDate(
-            @Param("aircraftId") Long aircraftId,
-            @Param("flightDate") LocalDate flightDate,
-            @Param("cancelledStatus") FlightStatus cancelledStatus
-    );
+
+    List<Flight> findAllByFlightStatusAndScheduledArrivalAtLessThanEqual(FlightStatus flightStatus, Instant scheduledArrivalAt);
+
 
 }

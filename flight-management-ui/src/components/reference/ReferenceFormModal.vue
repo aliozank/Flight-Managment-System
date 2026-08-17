@@ -21,6 +21,21 @@ const referenceStore = useReferenceStore()
 const formRef = ref<FormInstance>()
 const saving = ref(false)
 
+const timezoneOptions = [
+  'UTC',
+  'Europe/Istanbul',
+  'Europe/London',
+  'Europe/Berlin',
+  'Europe/Paris',
+  'Asia/Dubai',
+  'Asia/Singapore',
+  'Asia/Tokyo',
+  'America/New_York',
+  'America/Chicago',
+  'America/Los_Angeles',
+  'Australia/Sydney'
+]
+
 const form = reactive<Record<string, any>>({})
 
 const isEditMode = computed(() => !!props.itemToEdit)
@@ -35,31 +50,36 @@ const initForm = () => {
       form.airlineIataCode = ''
       form.airlineIcaoCode = ''
       form.airlineCountry = ''
+      form.airlineStatus = 'ACTIVE'
     } else if (props.tab === 'airports') {
       form.airportName = ''
       form.airportCity = ''
       form.airportCountry = ''
       form.airportIataCode = ''
       form.airportIcaoCode = ''
-      form.airportTimezone = 'UTC'
+      form.airportTimezone = 'Europe/Istanbul'
+      form.airportStatus = 'OPERATIONAL'
     } else if (props.tab === 'aircraftTypes') {
       form.aircraftTypeManufacturer = ''
       form.aircraftTypeModel = ''
       form.aircraftTypeIcaoCode = ''
+      form.aircraftTypeCategory = 'NARROW_BODY'
+      form.aircraftTypeStatus = 'ACTIVE'
     } else if (props.tab === 'aircrafts') {
       form.aircraftRegistrationNumber = ''
       form.operatorAirlineId = null
       form.aircraftTypeId = null
       form.aircraftCapacity = 180
       form.aircraftManufactureYear = 2020
+      form.aircraftStatus = 'ACTIVE'
     } else if (props.tab === 'routes') {
       form.originAirportId = null
       form.destinationAirportId = null
-      form.distanceKm = 500
-      form.estimatedDurationMinutes = 60
+      form.routeStatus = 'ACTIVE'
     } else if (props.tab === 'flightTypes') {
       form.flightTypeName = ''
       form.flightTypeCode = ''
+      form.flightTypeStatus = 'ACTIVE'
     }
   }
 }
@@ -74,6 +94,28 @@ watch(
 const handleSave = async () => {
   saving.value = true
   try {
+    Object.keys(form).forEach((key) => {
+      if (typeof form[key] === 'string') {
+        form[key] = form[key].trim()
+      }
+    })
+
+    const uppercaseFields = [
+      'airlineIataCode',
+      'airlineIcaoCode',
+      'airportIataCode',
+      'airportIcaoCode',
+      'aircraftTypeIcaoCode',
+      'aircraftRegistrationNumber',
+      'flightTypeCode'
+    ]
+
+    uppercaseFields.forEach((key) => {
+      if (typeof form[key] === 'string') {
+        form[key] = form[key].toUpperCase()
+      }
+    })
+
     const endpointMap: Record<ReferenceTab, string> = {
       airlines: '/api/airlines',
       airports: '/api/airports',
@@ -134,6 +176,20 @@ const handleSave = async () => {
         <el-form-item label="IATA Kodu" required>
           <el-input v-model="form.airlineIataCode" placeholder="Örn: TK" maxlength="3" />
         </el-form-item>
+        <el-form-item label="ICAO Kodu" required>
+          <el-input v-model="form.airlineIcaoCode" placeholder="Örn: THY" maxlength="3" />
+        </el-form-item>
+        <el-form-item label="Ülke" required>
+          <el-input v-model="form.airlineCountry" placeholder="Örn: Turkey" />
+        </el-form-item>
+        <el-form-item label="Durum" required>
+          <el-select v-model="form.airlineStatus" style="width: 100%">
+            <el-option label="Aktif" value="ACTIVE" />
+            <el-option label="Pasif" value="INACTIVE" />
+            <el-option label="Askıya Alındı" value="SUSPENDED" />
+            <el-option label="Faaliyetini Durdurdu" value="CEASED_OPERATIONS" />
+          </el-select>
+        </el-form-item>
       </template>
 
       <!-- Airports -->
@@ -155,6 +211,28 @@ const handleSave = async () => {
             <el-input v-model="form.airportIcaoCode" placeholder="Örn: LTFM" maxlength="4" />
           </el-form-item>
         </div>
+        <el-form-item label="Saat Dilimi" required>
+          <el-select
+            v-model="form.airportTimezone"
+            filterable
+            placeholder="Saat dilimi seçin"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="timezone in timezoneOptions"
+              :key="timezone"
+              :label="timezone"
+              :value="timezone"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="Durum" required>
+          <el-select v-model="form.airportStatus" style="width: 100%">
+            <el-option label="Operasyonel" value="OPERATIONAL" />
+            <el-option label="Geçici Kapalı" value="TEMPORARILY_CLOSED" />
+            <el-option label="Kalıcı Kapalı" value="PERMANENTLY_CLOSED" />
+          </el-select>
+        </el-form-item>
       </template>
 
       <!-- Aircraft Types -->
@@ -167,6 +245,20 @@ const handleSave = async () => {
         </el-form-item>
         <el-form-item label="ICAO Kodu" required>
           <el-input v-model="form.aircraftTypeIcaoCode" placeholder="Örn: A20N" />
+        </el-form-item>
+        <el-form-item label="Kategori" required>
+          <el-select v-model="form.aircraftTypeCategory" style="width: 100%">
+            <el-option label="Dar Gövde" value="NARROW_BODY" />
+            <el-option label="Geniş Gövde" value="WIDE_BODY" />
+            <el-option label="Bölgesel" value="REGIONAL" />
+            <el-option label="Turboprop" value="TURBOPROP" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="Durum" required>
+          <el-select v-model="form.aircraftTypeStatus" style="width: 100%">
+            <el-option label="Aktif" value="ACTIVE" />
+            <el-option label="Pasif" value="INACTIVE" />
+          </el-select>
         </el-form-item>
       </template>
 
@@ -195,6 +287,20 @@ const handleSave = async () => {
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="Kapasite" required>
+          <el-input-number v-model="form.aircraftCapacity" :min="0" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="Üretim Yılı" required>
+          <el-input-number v-model="form.aircraftManufactureYear" :min="1923" :max="new Date().getFullYear()" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="Durum" required>
+          <el-select v-model="form.aircraftStatus" style="width: 100%">
+            <el-option label="Aktif" value="ACTIVE" />
+            <el-option label="Bakımda" value="MAINTENANCE" />
+            <el-option label="Yerde" value="GROUNDED" />
+            <el-option label="Emekli" value="RETIRED" />
+          </el-select>
+        </el-form-item>
       </template>
 
       <!-- Routes -->
@@ -219,6 +325,12 @@ const handleSave = async () => {
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="Durum" required>
+          <el-select v-model="form.routeStatus" style="width: 100%">
+            <el-option label="Aktif" value="ACTIVE" />
+            <el-option label="Pasif" value="INACTIVE" />
+          </el-select>
+        </el-form-item>
       </template>
 
       <!-- Flight Types -->
@@ -228,6 +340,12 @@ const handleSave = async () => {
         </el-form-item>
         <el-form-item label="Kod" required>
           <el-input v-model="form.flightTypeCode" placeholder="Örn: PAX" />
+        </el-form-item>
+        <el-form-item label="Durum" required>
+          <el-select v-model="form.flightTypeStatus" style="width: 100%">
+            <el-option label="Aktif" value="ACTIVE" />
+            <el-option label="Pasif" value="INACTIVE" />
+          </el-select>
         </el-form-item>
       </template>
     </el-form>

@@ -40,6 +40,10 @@ public class ArchivedFlightResponse {
 
     private Instant eventOccurredAt;
     private Instant archivedAt;
+
+    private LocalDate scheduledArrivalDate;
+    private Instant scheduledDepartureAt;
+    private Instant scheduledArrivalAt;
 }
 
 

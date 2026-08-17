@@ -17,7 +17,7 @@ public class FlightReferenceValidationService {
         this.referenceManagerClient = referenceManagerClient;
     }
 
-    public void validateAirline(Long airlineId) {
+    public AirlineReferenceResponse validateAirline(Long airlineId) {
 
         AirlineReferenceResponse airline = referenceManagerClient.getAirlineById(airlineId);
 
@@ -27,6 +27,8 @@ public class FlightReferenceValidationService {
                     "Airline status is not ACTIVE");
 
         }
+
+        return airline;
 
     }
 
@@ -42,13 +44,16 @@ public class FlightReferenceValidationService {
 
     }
 
-    public void validateAirport(Long airportId) {
+    public AirportReferenceResponse validateAirport(Long airportId) {
         AirportReferenceResponse airport = referenceManagerClient.getAirportById(airportId);
 
         if (!"OPERATIONAL".equalsIgnoreCase(airport.getAirportStatus())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Airport status is not OPERATIONAL");
         }
+
+        return airport;
+
     }
 
     public void validateFlightType(Long flightTypeId) {
@@ -60,7 +65,7 @@ public class FlightReferenceValidationService {
         }
     }
 
-    public void validateAircraft(Long aircraftId, Long selectedAircraftTypeId) {
+    public void validateAircraft(Long aircraftId, Long selectedAircraftTypeId, Long selectedAirlineId) {
 
         if (aircraftId == null) {
             return;
@@ -81,6 +86,21 @@ public class FlightReferenceValidationService {
                     "Selected aircraft does not belong to selected aircraft type"
             );
         }
+
+        if (aircraft.getOperatorAirlineId() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Selected aircraft is not assigned to an airline"
+            );
+        }
+
+        if (!aircraft.getOperatorAirlineId().equals(selectedAirlineId)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Selected aircraft does not belong to selected airline"
+            );
+        }
+
     }
 
     public void validateRoute(Long originAirportId, Long destinationAirportId) {
@@ -101,7 +121,9 @@ public class FlightReferenceValidationService {
 
     public void validateCreateRequest(FlightCreateRequest request) {
 
-        validateAirline(request.getAirlineId());
+        AirlineReferenceResponse airline = validateAirline(request.getAirlineId());
+
+        validateFlightNumberMatchesAirline(request.getFlightNumber(), airline);
 
         validateAircraftType(request.getAircraftTypeId());
 
@@ -111,15 +133,18 @@ public class FlightReferenceValidationService {
 
         validateAirport(request.getDestinationAirportId());
 
-        validateRoute(request.getOriginAirportId(),  request.getDestinationAirportId());
+        validateRoute(request.getOriginAirportId(), request.getDestinationAirportId());
 
-        validateAircraft(request.getAircraftId(),  request.getAircraftTypeId());
+        validateAircraft(request.getAircraftId(), request.getAircraftTypeId(), request.getAirlineId());
 
     }
+
 
     public void validateUpdateRequest(FlightUpdateRequest request) {
 
-        validateAirline(request.getAirlineId());
+        AirlineReferenceResponse airline = validateAirline(request.getAirlineId());
+
+        validateFlightNumberMatchesAirline(request.getFlightNumber(), airline);
 
         validateAircraftType(request.getAircraftTypeId());
 
@@ -129,11 +154,26 @@ public class FlightReferenceValidationService {
 
         validateAirport(request.getDestinationAirportId());
 
-        validateRoute(request.getOriginAirportId(),  request.getDestinationAirportId());
+        validateRoute(request.getOriginAirportId(), request.getDestinationAirportId());
 
-        validateAircraft(request.getAircraftId(),  request.getAircraftTypeId());
+        validateAircraft(request.getAircraftId(), request.getAircraftTypeId(), request.getAirlineId());
 
     }
+
+
+    private void validateFlightNumberMatchesAirline(String flightNumber, AirlineReferenceResponse airline) {
+
+        if (flightNumber == null || flightNumber.length() < 2 || airline.getAirlineIataCode() == null || !flightNumber.substring(0, 2)
+                .equalsIgnoreCase(airline.getAirlineIataCode())) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Flight number must start with the selected airline's IATA code"
+
+            );
+        }
+    }
+
 
 
 }

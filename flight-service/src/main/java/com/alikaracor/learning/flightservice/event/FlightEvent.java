@@ -38,4 +38,10 @@ public class FlightEvent {
 
     private Long changedByUserId;
 
+    private LocalDate scheduledArrivalDate;
+
+    private Instant scheduledDepartureAt;
+
+    private Instant scheduledArrivalAt;
+
 }

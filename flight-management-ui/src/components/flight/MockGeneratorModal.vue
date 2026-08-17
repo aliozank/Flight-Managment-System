@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useFlightStore } from '@/stores/flightStore'
 
 const props = defineProps<{
@@ -22,11 +22,27 @@ const form = reactive({
 const handleGenerate = async () => {
   generating.value = true
   try {
-    const flights = await flightStore.generateMockFlights({
+    const result = await flightStore.generateMockFlights({
       flightCount: form.flightCount,
       maximumFutureDays: form.maximumFutureDays
     })
-    ElMessage.success(`${flights.length} adet mock uçuş başarıyla oluşturuldu!`)
+
+    if (result.failedCount === 0) {
+      ElMessage.success(`${result.successfulCount} adet mock uçuş başarıyla oluşturuldu!`)
+    } else {
+      const summary = `${result.successfulCount} başarılı, ${result.failedCount} başarısız.`
+      ElMessage.warning(summary)
+
+      await ElMessageBox.alert(
+        result.errors.join(' • '),
+        'Mock Uçuş Üretim Sonucu',
+        {
+          confirmButtonText: 'Tamam',
+          type: 'warning'
+        }
+      )
+    }
+
     emit('update:visible', false)
   } catch {
     // Handled by axios interceptor

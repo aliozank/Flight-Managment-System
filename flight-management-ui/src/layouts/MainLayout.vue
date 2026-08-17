@@ -69,7 +69,12 @@ const handleLogout = async () => {
           <span class="nav-text">Canlı Radarı</span>
         </router-link>
 
-        <router-link to="/reference-data" class="nav-item" :class="{ active: route.path.startsWith('/reference-data') }">
+        <router-link
+          v-if="authStore.canViewReferenceData"
+          to="/reference-data"
+          class="nav-item"
+          :class="{ active: route.path.startsWith('/reference-data') }"
+        >
           <span class="nav-icon">📚</span>
           <span class="nav-text">Referans Veriler</span>
         </router-link>
@@ -89,7 +94,12 @@ const handleLogout = async () => {
           <span class="nav-text">Uçuş Arşivi</span>
         </router-link>
 
-        <router-link to="/monitoring" class="nav-item" :class="{ active: route.path.startsWith('/monitoring') }">
+        <router-link
+          v-if="authStore.canViewMonitoring"
+          to="/monitoring"
+          class="nav-item"
+          :class="{ active: route.path.startsWith('/monitoring') }"
+        >
           <span class="nav-icon">🖥️</span>
           <span class="nav-text">Sistem İzleme</span>
         </router-link>

@@ -1,7 +1,9 @@
 package com.alikaracor.learning.flightservice.service;
 
+import com.alikaracor.learning.flightservice.client.dto.AirportReferenceResponse;
 import com.alikaracor.learning.flightservice.dto.FlightCreateRequest;
 import com.alikaracor.learning.flightservice.dto.FlightResponse;
+import com.alikaracor.learning.flightservice.dto.FlightStatusUpdateRequest;
 import com.alikaracor.learning.flightservice.dto.FlightUpdateRequest;
 import com.alikaracor.learning.flightservice.event.FlightEventType;
 import com.alikaracor.learning.flightservice.mapper.FlightMapper;
@@ -18,12 +20,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.DateTimeException;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
-import java.util.Optional;
+
 
 @Service
 public class FlightService {
@@ -86,17 +88,18 @@ public class FlightService {
         try {
             flightReferenceValidationService.validateCreateRequest(flightCreateRequest);
 
-            aircraftScheduleConflictValidationService.validateAircraftScheduleForCreate(
-                    flightCreateRequest.getAircraftId(),
-                    flightCreateRequest.getFlightDate(),
-                    flightCreateRequest.getScheduledDepartureTime(),
-                    flightCreateRequest.getScheduledArrivalTime()
-            );
-
             Flight newFlight = flightMapper.toFlight(flightCreateRequest);
 
             newFlight.setFlightStatus(FlightStatus.SCHEDULED);
             newFlight.setFlightVersion(1);
+
+            applyScheduleInstants(newFlight);
+
+            aircraftScheduleConflictValidationService.validateAircraftScheduleForCreate(
+                    newFlight.getAircraftId(),
+                    newFlight.getScheduledDepartureAt(),
+                    newFlight.getScheduledArrivalAt()
+            );
 
             Flight savedFlight = flightRepository.save(newFlight);
 
@@ -139,6 +142,17 @@ public class FlightService {
     }
 
     @Transactional
+    public FlightResponse updateFlightStatusAutomatically(Long flightId, FlightStatus targetStatus) {
+
+        FlightStatusUpdateRequest request = new FlightStatusUpdateRequest();
+        request.setFlightStatus(targetStatus);
+
+        return updateFlightStatus(flightId, request, null, null);
+
+    }
+
+
+    @Transactional
     public FlightResponse updateFlight(Long flightId, FlightUpdateRequest flightUpdateRequest, Long actorUserId, String ipAddress) {
 
         Flight updateFlight = flightRepository.findById(flightId)
@@ -148,6 +162,15 @@ public class FlightService {
                                     "Flight with id " + flightId + " not found.");
                         }
                 );
+
+        if (updateFlight.getFlightStatus() != FlightStatus.SCHEDULED && updateFlight.getFlightStatus() != FlightStatus.DELAYED) {
+
+            activityLogService.logFlightUpdateFailure(actorUserId, flightId, "Flight status is not suitable for update", ipAddress);
+
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Flight status is not suitable for update");
+
+        }
 
         if (flightRepository.existsByFlightNumberAndFlightDateAndFlightIdNot(flightUpdateRequest.getFlightNumber(), flightUpdateRequest.getFlightDate(), flightId)) {
 
@@ -163,19 +186,20 @@ public class FlightService {
 
             flightReferenceValidationService.validateUpdateRequest(flightUpdateRequest);
 
-            aircraftScheduleConflictValidationService.validateAircraftScheduleForUpdate(
-                    flightId,
-                    flightUpdateRequest.getAircraftId(),
-                    flightUpdateRequest.getFlightDate(),
-                    flightUpdateRequest.getScheduledDepartureTime(),
-                    flightUpdateRequest.getScheduledArrivalTime()
-            );
-
             flightMapper.updateFlight(flightUpdateRequest, updateFlight);
 
             updateFlight.setFlightUpdatedAt(Instant.now());
 
             updateFlight.setFlightVersion(updateFlight.getFlightVersion() + 1);
+
+            applyScheduleInstants(updateFlight);
+
+            aircraftScheduleConflictValidationService.validateAircraftScheduleForUpdate(
+                    flightId,
+                    updateFlight.getAircraftId(),
+                    updateFlight.getScheduledDepartureAt(),
+                    updateFlight.getScheduledArrivalAt()
+            );
 
             flightRepository.save(updateFlight);
 
@@ -231,14 +255,23 @@ public class FlightService {
         if (cancelFlight.getFlightStatus().equals(FlightStatus.CANCELLED)) {
             activityLogService.logFlightCancelFailure(actorUserId, flightId, "Bu uçuş zaten iptal edilmiş", ipAddress);
 
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Bu uçuş zaten iptal edilmiş");
         }
 
-        if (cancelFlight.getFlightStatus().equals(FlightStatus.ARRIVED)) {
-            activityLogService.logFlightCancelFailure(actorUserId,flightId,"Bu uçuş zaten gerçeklmiş neyi iptal ediyon", ipAddress);
+        if (cancelFlight.getFlightStatus().equals(FlightStatus.DEPARTED)) {
 
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+            activityLogService.logFlightCancelFailure(actorUserId, flightId, "Bu uçuş zaten kalkmış neyi iptal ediyon", ipAddress);
+
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Bu uçuş zaten kalkmış iptal edilemez");
+
+        }
+
+        if (cancelFlight.getFlightStatus().equals(FlightStatus.ARRIVED)) {
+            activityLogService.logFlightCancelFailure(actorUserId, flightId, "Bu uçuş zaten gerçeklmiş neyi iptal ediyon", ipAddress);
+
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Bu uçuş zaten gerçeklmiş iptal edilemez");
 
         }
@@ -281,6 +314,172 @@ public class FlightService {
     }
 
 
+    private boolean isStatusTransitionAllowed(FlightStatus currentStatus, FlightStatus targetStatus) {
+
+        return switch (currentStatus) {
+
+            case SCHEDULED -> targetStatus == FlightStatus.DELAYED || targetStatus == FlightStatus.DEPARTED;
+
+            case DELAYED -> targetStatus == FlightStatus.SCHEDULED || targetStatus == FlightStatus.DEPARTED;
+
+            case DEPARTED -> targetStatus == FlightStatus.ARRIVED;
+
+            case ARRIVED, CANCELLED -> false;
+        };
+
+    }
+
+
+    @Transactional
+    public FlightResponse updateFlightStatus(Long flightId, FlightStatusUpdateRequest flightUpdateRequestStatus, Long actorUserId, String ipAddress) {
+
+        boolean automaticUpdate = actorUserId == null;
+
+        Flight oldFlight = flightRepository.findById(flightId)
+                .orElseThrow(() -> {
+
+                            if (automaticUpdate) {
+
+                                activityLogService.logAutomaticFlightStatusUpdateFailure(flightId, "Flight not found");
+
+                            } else {
+
+                                activityLogService.logFlightUpdateFailure(actorUserId, flightId, "Flight not found", ipAddress);
+
+                            }
+
+                            return new ResponseStatusException(HttpStatus.NOT_FOUND, "Flight with id " + flightId + " not found.");
+
+                        }
+                );
+
+        FlightStatus targetStatus = flightUpdateRequestStatus.getFlightStatus();
+
+        FlightStatus oldStatus = oldFlight.getFlightStatus();
+
+        if (oldStatus.equals(targetStatus)) {
+
+            return flightMapper.toFlightResponse(oldFlight);
+
+        }
+
+
+        try {
+
+            if (targetStatus == FlightStatus.CANCELLED) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Flight cancellation must use the cancellation endpoint"
+                );
+            }
+
+            if (!isStatusTransitionAllowed(oldStatus, targetStatus)) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Flight status cannot transition from " + oldStatus + " to " + targetStatus);
+            }
+
+            oldFlight.setFlightStatus(targetStatus);
+            oldFlight.setFlightUpdatedAt(Instant.now());
+            oldFlight.setFlightVersion(oldFlight.getFlightVersion() + 1);
+
+            flightRepository.save(oldFlight);
+
+            FlightVersion updatedFlightVersion = flightMapper.toFlightVersion(oldFlight);
+
+            updatedFlightVersion.setFlightChangeType(FlightChangeType.UPDATED);
+            updatedFlightVersion.setChangedByUserId(actorUserId);
+
+            flightVersionRepository.save(updatedFlightVersion);
+
+            if (automaticUpdate) {
+
+                activityLogService.logAutomaticFlightStatusUpdated(oldFlight.getFlightId());
+
+            } else {
+
+                activityLogService.logFlightUpdated(actorUserId, oldFlight.getFlightId(), ipAddress);
+
+            }
+
+
+            flightEventPublisher.publish(oldFlight, FlightEventType.UPDATED, actorUserId);
+
+            FlightResponse flightResponse = flightMapper.toFlightResponse(oldFlight);
+
+            flightWebSocketPublisher.publish(flightResponse);
+
+            return flightResponse;
+
+        } catch (RuntimeException exception) {
+
+            String failureReason = "Flight status update failed";
+
+            if (exception instanceof ResponseStatusException responseStatusException && responseStatusException.getReason() != null) {
+
+                failureReason = responseStatusException.getReason();
+            }
+
+            if (automaticUpdate) {
+
+                activityLogService.logAutomaticFlightStatusUpdateFailure(oldFlight.getFlightId(), failureReason);
+
+            }
+
+            else {
+
+                activityLogService.logFlightUpdateFailure(actorUserId, oldFlight.getFlightId(), failureReason, ipAddress);
+
+            }
+
+
+
+            throw exception;
+        }
+
+    }
+
+    private void applyScheduleInstants(Flight flight) {
+
+        AirportReferenceResponse originAirport = flightReferenceValidationService.validateAirport(flight.getOriginAirportId());
+
+        AirportReferenceResponse destinationAirport = flightReferenceValidationService.validateAirport(flight.getDestinationAirportId());
+
+        try {
+            ZoneId originZone = ZoneId.of(originAirport.getAirportTimezone());
+
+            ZoneId destinationZone = ZoneId.of(destinationAirport.getAirportTimezone());
+
+            LocalDateTime departureLocal = LocalDateTime.of(
+                    flight.getFlightDate(),
+                    flight.getScheduledDepartureTime()
+            );
+
+            LocalDateTime arrivalLocal = LocalDateTime.of(
+                    flight.getScheduledArrivalDate(),
+                    flight.getScheduledArrivalTime()
+            );
+
+            Instant departureAt = departureLocal.atZone(originZone).toInstant();
+
+            Instant arrivalAt = arrivalLocal.atZone(destinationZone).toInstant();
+
+            if (!arrivalAt.isAfter(departureAt)) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Scheduled arrival must be after scheduled departure"
+                );
+            }
+
+            flight.setScheduledDepartureAt(departureAt);
+            flight.setScheduledArrivalAt(arrivalAt);
+
+        } catch (DateTimeException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Airport timezone is invalid",
+                    exception
+            );
+        }
+    }
 }
-
-

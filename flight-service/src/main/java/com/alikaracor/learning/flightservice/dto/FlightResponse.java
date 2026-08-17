@@ -30,12 +30,6 @@ public class FlightResponse {
 
     private Long flightTypeId;
 
-    private LocalDate flightDate;
-
-    private LocalTime scheduledDepartureTime;
-
-    private LocalTime scheduledArrivalTime;
-
     private FlightStatus flightStatus;
 
     private Integer flightVersion;
@@ -43,4 +37,18 @@ public class FlightResponse {
     private Instant flightCreatedAt;
 
     private Instant flightUpdatedAt;
+
+    private LocalDate flightDate;
+
+    private LocalTime scheduledDepartureTime;
+
+    private LocalDate scheduledArrivalDate;
+
+    private LocalTime scheduledArrivalTime;
+
+    private Instant scheduledDepartureAt;
+
+    private Instant scheduledArrivalAt;
+
+
 }

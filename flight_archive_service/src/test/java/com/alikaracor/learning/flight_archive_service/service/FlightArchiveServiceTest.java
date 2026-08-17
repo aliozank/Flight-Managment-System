@@ -62,6 +62,9 @@ class FlightArchiveServiceTest {
         sampleEvent.setFlightDate(LocalDate.of(2026, 10, 1));
         sampleEvent.setScheduledDepartureTime(LocalTime.of(10, 0));
         sampleEvent.setScheduledArrivalTime(LocalTime.of(12, 0));
+        sampleEvent.setScheduledArrivalDate(LocalDate.of(2026, 10, 1));
+        sampleEvent.setScheduledDepartureAt(Instant.parse("2026-10-01T10:00:00Z"));
+        sampleEvent.setScheduledArrivalAt(Instant.parse("2026-10-01T12:00:00Z"));
         sampleEvent.setFlightStatus(FlightStatus.ARRIVED);
         sampleEvent.setFlightVersion(2);
         sampleEvent.setChangedByUserId(99L);
@@ -92,6 +95,9 @@ class FlightArchiveServiceTest {
         assertThat(saved.getEventId()).isEqualTo(sampleEvent.getEventId());
         assertThat(saved.getFlightId()).isEqualTo(100L);
         assertThat(saved.getFlightStatus()).isEqualTo(FlightStatus.ARRIVED);
+        assertThat(saved.getScheduledArrivalDate()).isEqualTo(sampleEvent.getScheduledArrivalDate());
+        assertThat(saved.getScheduledDepartureAt()).isEqualTo(sampleEvent.getScheduledDepartureAt());
+        assertThat(saved.getScheduledArrivalAt()).isEqualTo(sampleEvent.getScheduledArrivalAt());
     }
 
     @Test

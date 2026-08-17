@@ -5,8 +5,11 @@ import type {
   FlightResponse,
   FlightCreateRequest,
   FlightUpdateRequest,
+  FlightStatus,
+  FlightStatusUpdateRequest,
   FlightCsvImportResponse,
-  MockFlightGenerationRequest
+  MockFlightGenerationRequest,
+  MockFlightGenerationResponse
 } from '@/types/flight'
 
 export const useFlightStore = defineStore('flight', () => {
@@ -88,6 +91,13 @@ export const useFlightStore = defineStore('flight', () => {
     return response.data
   }
 
+  const updateFlightStatus = async (flightId: number, flightStatus: FlightStatus): Promise<FlightResponse> => {
+    const payload: FlightStatusUpdateRequest = { flightStatus }
+    const response = await flightApi.patch<FlightResponse>(`/api/flights/${flightId}/status`, payload)
+    await fetchFlights()
+    return response.data
+  }
+
   const cancelFlight = async (flightId: number): Promise<void> => {
     await flightApi.delete(`/api/flights/${flightId}`)
     await fetchFlights()
@@ -103,19 +113,27 @@ export const useFlightStore = defineStore('flight', () => {
     return response.data
   }
 
-  const generateMockFlights = async (request: MockFlightGenerationRequest): Promise<FlightResponse[]> => {
-    const response = await flightApi.post<FlightResponse[]>('/api/flights/mock', request)
+  const generateMockFlights = async (request: MockFlightGenerationRequest): Promise<MockFlightGenerationResponse> => {
+    const response = await flightApi.post<MockFlightGenerationResponse>('/api/flights/mock', request)
     await fetchFlights()
     return response.data
   }
 
-  const upsertFlightFromWebSocket = (updatedFlight: FlightResponse): void => {
+  const upsertFlightFromWebSocket = (updatedFlight: FlightResponse): boolean => {
     const index = flights.value.findIndex((f) => f.flightId === updatedFlight.flightId)
     if (index !== -1) {
+      const currentFlight = flights.value[index]
+
+      if (currentFlight && updatedFlight.flightVersion <= currentFlight.flightVersion) {
+        return false
+      }
+
       flights.value[index] = updatedFlight
     } else {
       flights.value.unshift(updatedFlight)
     }
+
+    return true
   }
 
   return {
@@ -136,6 +154,7 @@ export const useFlightStore = defineStore('flight', () => {
     fetchFlights,
     createFlight,
     updateFlight,
+    updateFlightStatus,
     cancelFlight,
     uploadCsv,
     generateMockFlights,

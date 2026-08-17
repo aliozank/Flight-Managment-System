@@ -2,12 +2,15 @@
 import { ref, reactive, watch, onMounted, onUnmounted, computed } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { useReferenceStore } from '@/stores/referenceStore'
-import type { FlightResponse, FlightCreateRequest, FlightUpdateRequest, FlightStatus } from '@/types/flight'
+import type { FlightResponse, FlightCreateRequest, FlightUpdateRequest } from '@/types/flight'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   visible: boolean
   flightToEdit?: FlightResponse | null
-}>()
+  saving?: boolean
+}>(), {
+  saving: false
+})
 
 const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void
@@ -17,7 +20,6 @@ const emit = defineEmits<{
 
 const referenceStore = useReferenceStore()
 const formRef = ref<FormInstance>()
-const saving = ref(false)
 const isDirty = ref(false)
 
 const isEditMode = computed(() => !!props.flightToEdit)
@@ -32,8 +34,8 @@ const form = reactive({
   flightTypeId: null as number | null,
   flightDate: '',
   scheduledDepartureTime: '',
-  scheduledArrivalTime: '',
-  flightStatus: 'SCHEDULED' as FlightStatus
+  scheduledArrivalDate: '',
+  scheduledArrivalTime: ''
 })
 
 // Regex: 2 uppercase letters/digits + 4 digits (e.g. TK1234, 8A9999)
@@ -57,16 +59,6 @@ const validateAirports = (_rule: any, _value: any, callback: any) => {
   }
 }
 
-const validateTimes = (_rule: any, _value: any, callback: any) => {
-  if (form.scheduledDepartureTime && form.scheduledArrivalTime) {
-    if (form.scheduledArrivalTime <= form.scheduledDepartureTime) {
-      callback(new Error('Varış saati (STA) kalkış saatinden (STD) sonra olmalıdır'))
-      return
-    }
-  }
-  callback()
-}
-
 const rules = reactive<FormRules>({
   flightNumber: [{ validator: validateFlightNumber, trigger: 'blur' }],
   airlineId: [{ required: true, message: 'Havayolu seçimi zorunludur', trigger: 'change' }],
@@ -82,10 +74,8 @@ const rules = reactive<FormRules>({
   flightTypeId: [{ required: true, message: 'Uçuş tipi seçimi zorunludur', trigger: 'change' }],
   flightDate: [{ required: true, message: 'Uçuş tarihi zorunludur', trigger: 'change' }],
   scheduledDepartureTime: [{ required: true, message: 'Kalkış saati zorunludur', trigger: 'change' }],
-  scheduledArrivalTime: [
-    { required: true, message: 'Varış saati zorunludur', trigger: 'change' },
-    { validator: validateTimes, trigger: 'change' }
-  ]
+  scheduledArrivalDate: [{ required: true, message: 'Varış tarihi zorunludur', trigger: 'change' }],
+  scheduledArrivalTime: [{ required: true, message: 'Varış saati zorunludur', trigger: 'change' }]
 })
 
 const resetForm = () => {
@@ -99,8 +89,8 @@ const resetForm = () => {
     form.flightTypeId = props.flightToEdit.flightTypeId
     form.flightDate = props.flightToEdit.flightDate
     form.scheduledDepartureTime = props.flightToEdit.scheduledDepartureTime
+    form.scheduledArrivalDate = props.flightToEdit.scheduledArrivalDate
     form.scheduledArrivalTime = props.flightToEdit.scheduledArrivalTime
-    form.flightStatus = props.flightToEdit.flightStatus
   } else {
     form.flightNumber = ''
     form.airlineId = null
@@ -111,8 +101,8 @@ const resetForm = () => {
     form.flightTypeId = null
     form.flightDate = new Date().toISOString().split('T')[0] || ''
     form.scheduledDepartureTime = '12:00:00'
+    form.scheduledArrivalDate = form.flightDate
     form.scheduledArrivalTime = '14:00:00'
-    form.flightStatus = 'SCHEDULED'
   }
   isDirty.value = false
 }
@@ -152,6 +142,8 @@ const handleAircraftChange = (aircraftId: number | null) => {
 }
 
 const handleBeforeClose = (done: () => void) => {
+  if (props.saving) return
+
   if (isDirty.value) {
     ElMessageBox.confirm('Kaydedilmemiş değişiklikler var. Çıkmak istediğinize emin misiniz?', 'Uyarı', {
       confirmButtonText: 'Çık',
@@ -166,49 +158,43 @@ const handleBeforeClose = (done: () => void) => {
 }
 
 const handleSubmit = async () => {
-  if (!formRef.value) return
+  if (!formRef.value || props.saving) return
   try {
     await formRef.value.validate()
   } catch {
     return
   }
 
-  saving.value = true
-  try {
-    if (isEditMode.value && props.flightToEdit) {
-      const updatePayload: FlightUpdateRequest = {
-        flightNumber: form.flightNumber.toUpperCase(),
-        airlineId: form.airlineId!,
-        aircraftId: form.aircraftId,
-        aircraftTypeId: form.aircraftTypeId!,
-        originAirportId: form.originAirportId!,
-        destinationAirportId: form.destinationAirportId!,
-        flightTypeId: form.flightTypeId!,
-        flightDate: form.flightDate,
-        scheduledDepartureTime: form.scheduledDepartureTime,
-        scheduledArrivalTime: form.scheduledArrivalTime,
-        flightStatus: form.flightStatus
-      }
-      emit('save-update', { id: props.flightToEdit.flightId, data: updatePayload })
-    } else {
-      const createPayload: FlightCreateRequest = {
-        flightNumber: form.flightNumber.toUpperCase(),
-        airlineId: form.airlineId,
-        aircraftId: form.aircraftId,
-        aircraftTypeId: form.aircraftTypeId,
-        originAirportId: form.originAirportId,
-        destinationAirportId: form.destinationAirportId,
-        flightTypeId: form.flightTypeId,
-        flightDate: form.flightDate,
-        scheduledDepartureTime: form.scheduledDepartureTime,
-        scheduledArrivalTime: form.scheduledArrivalTime
-      }
-      emit('save-create', createPayload)
+  if (isEditMode.value && props.flightToEdit) {
+    const updatePayload: FlightUpdateRequest = {
+      flightNumber: form.flightNumber.toUpperCase(),
+      airlineId: form.airlineId!,
+      aircraftId: form.aircraftId,
+      aircraftTypeId: form.aircraftTypeId!,
+      originAirportId: form.originAirportId!,
+      destinationAirportId: form.destinationAirportId!,
+      flightTypeId: form.flightTypeId!,
+      flightDate: form.flightDate,
+      scheduledDepartureTime: form.scheduledDepartureTime,
+      scheduledArrivalDate: form.scheduledArrivalDate,
+      scheduledArrivalTime: form.scheduledArrivalTime
     }
-    isDirty.value = false
-    emit('update:visible', false)
-  } finally {
-    saving.value = false
+    emit('save-update', { id: props.flightToEdit.flightId, data: updatePayload })
+  } else {
+    const createPayload: FlightCreateRequest = {
+      flightNumber: form.flightNumber.toUpperCase(),
+      airlineId: form.airlineId,
+      aircraftId: form.aircraftId,
+      aircraftTypeId: form.aircraftTypeId,
+      originAirportId: form.originAirportId,
+      destinationAirportId: form.destinationAirportId,
+      flightTypeId: form.flightTypeId,
+      flightDate: form.flightDate,
+      scheduledDepartureTime: form.scheduledDepartureTime,
+      scheduledArrivalDate: form.scheduledArrivalDate,
+      scheduledArrivalTime: form.scheduledArrivalTime
+    }
+    emit('save-create', createPayload)
   }
 }
 
@@ -238,6 +224,9 @@ onUnmounted(() => {
     align-center
     :before-close="handleBeforeClose"
     :append-to-body="true"
+    :close-on-click-modal="!saving"
+    :close-on-press-escape="!saving"
+    :show-close="!saving"
     @update:model-value="emit('update:visible', $event)"
     destroy-on-close
   >
@@ -374,6 +363,17 @@ onUnmounted(() => {
             />
           </el-form-item>
 
+          <el-form-item label="Varış Tarihi" prop="scheduledArrivalDate">
+            <el-date-picker
+              v-model="form.scheduledArrivalDate"
+              type="date"
+              value-format="YYYY-MM-DD"
+              placeholder="Varış tarihini seçin"
+              style="width: 100%"
+              :teleported="true"
+            />
+          </el-form-item>
+
           <el-form-item label="Varış Saati (STA)" prop="scheduledArrivalTime">
             <el-time-picker
               v-model="form.scheduledArrivalTime"
@@ -399,15 +399,6 @@ onUnmounted(() => {
             </el-select>
           </el-form-item>
 
-          <el-form-item v-if="isEditMode" label="Uçuş Durumu (Flight Status)" prop="flightStatus">
-            <el-select v-model="form.flightStatus" style="width: 100%">
-              <el-option label="Planlandı (SCHEDULED)" value="SCHEDULED" />
-              <el-option label="Rötarlı (DELAYED)" value="DELAYED" />
-              <el-option label="Kalktı (DEPARTED)" value="DEPARTED" />
-              <el-option label="İndi (ARRIVED)" value="ARRIVED" />
-              <el-option label="İptal Edildi (CANCELLED)" value="CANCELLED" />
-            </el-select>
-          </el-form-item>
         </el-card>
       </div>
     </el-form>
@@ -416,8 +407,8 @@ onUnmounted(() => {
       <div class="dialog-footer">
         <span class="shortcut-tip">💡 Kısayol: <b>Ctrl + S</b> ile hızlı kaydet</span>
         <div>
-          <el-button @click="emit('update:visible', false)">Vazgeç</el-button>
-          <el-button type="primary" :loading="saving" @click="handleSubmit">
+          <el-button :disabled="saving" @click="emit('update:visible', false)">Vazgeç</el-button>
+          <el-button type="primary" :loading="saving" :disabled="saving" @click="handleSubmit">
             {{ isEditMode ? 'Güncelle' : 'Kaydet' }}
           </el-button>
         </div>

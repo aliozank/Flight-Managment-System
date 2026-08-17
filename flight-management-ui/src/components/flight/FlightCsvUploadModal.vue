@@ -116,7 +116,7 @@ const handleClose = () => {
           <div class="upload-icon">📁</div>
           <div class="upload-text">
             <span>Kendi CSV dosyanızı buraya sürükleyin veya <em>tıklayıp seçin</em></span>
-            <p class="file-hint">Desteklenen başlıklar: flightNumber, airlineId, aircraftId, aircraftTypeId, originAirportId, destinationAirportId, flightTypeId, flightDate, scheduledDepartureTime, scheduledArrivalTime</p>
+            <p class="file-hint">Desteklenen başlıklar: flightNumber, airlineId, aircraftId, aircraftTypeId, originAirportId, destinationAirportId, flightTypeId, flightDate, scheduledDepartureTime, scheduledArrivalTime, scheduledArrivalDate</p>
           </div>
         </div>
       </el-upload>

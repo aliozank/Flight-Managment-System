@@ -119,49 +119,24 @@ const getAirportGps = (airportId: number) => {
   }
 }
 
-// Convert flight date & time string to Date timestamp (ms)
-const getFlightTimestamp = (flightDate: string, timeStr: string): number => {
-  try {
-    const cleanTime = timeStr.length === 5 ? `${timeStr}:00` : timeStr
-    const isoStr = `${flightDate}T${cleanTime}`
-    const dt = new Date(isoStr)
-    return dt.getTime()
-  } catch {
-    return Date.now()
-  }
-}
-
 // PURE 1X REAL-TIME TELEMETRY ENGINE
 const calculateFlightTelemetry = (flight: FlightResponse) => {
   const origin = getAirportGps(flight.originAirportId)
   const dest = getAirportGps(flight.destinationAirportId)
 
-  const depMs = getFlightTimestamp(flight.flightDate, flight.scheduledDepartureTime)
-  let arrMs = getFlightTimestamp(flight.flightDate, flight.scheduledArrivalTime)
+  const parsedDepartureMs = Date.parse(flight.scheduledDepartureAt)
+  const parsedArrivalMs = Date.parse(flight.scheduledArrivalAt)
+  const depMs = Number.isFinite(parsedDepartureMs) ? parsedDepartureMs : nowTimeMs.value
+  const arrMs = Number.isFinite(parsedArrivalMs) ? parsedArrivalMs : depMs
 
-  if (arrMs <= depMs) {
-    arrMs += 24 * 60 * 60 * 1000
-  }
-
-  const totalDuration = arrMs - depMs
+  const totalDuration = Math.max(arrMs - depMs, 1)
   const currentClock = nowTimeMs.value
   const elapsed = currentClock - depMs
 
-  let progressFraction = 0
-  let isAirborne = false
-
-  if (flight.flightStatus === 'CANCELLED') {
-    isAirborne = false
-  } else if (currentClock < depMs) {
-    progressFraction = 0
-    isAirborne = false
-  } else if (currentClock >= arrMs) {
-    progressFraction = 1
-    isAirborne = false
-  } else {
-    progressFraction = Math.max(0, Math.min(1, elapsed / totalDuration))
-    isAirborne = true
-  }
+  const progressFraction = flight.flightStatus === 'ARRIVED'
+    ? 1
+    : Math.max(0, Math.min(1, elapsed / totalDuration))
+  const isAirborne = flight.flightStatus === 'DEPARTED'
 
   // Exact Real GPS Position along line vector directly to Airport Runway Threshold
   const currentLat = origin.rwyEnd[0] + (dest.rwyStart[0] - origin.rwyEnd[0]) * progressFraction
@@ -175,8 +150,8 @@ const calculateFlightTelemetry = (flight: FlightResponse) => {
   const altitude = isAirborne ? (isCruising ? 34000 : Math.round(progressFraction * 34000)) : 0
   const speed = isAirborne ? (isCruising ? 460 : Math.round(progressFraction * 460)) : 0
 
-  const depTimeFormatted = new Date(depMs).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
-  const arrTimeFormatted = new Date(arrMs).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+  const depTimeFormatted = `${flight.flightDate} ${flight.scheduledDepartureTime.substring(0, 5)}`
+  const arrTimeFormatted = `${flight.scheduledArrivalDate} ${flight.scheduledArrivalTime.substring(0, 5)}`
 
   return {
     lat: currentLat,
@@ -195,10 +170,7 @@ const calculateFlightTelemetry = (flight: FlightResponse) => {
 
 // Pure 1x Real-Time Airborne Flights
 const activeFlightsOnMap = computed(() => {
-  return flightStore.flights.filter((f) => {
-    const tele = calculateFlightTelemetry(f)
-    return tele.isAirborne || f.flightStatus === 'DEPARTED'
-  })
+  return flightStore.flights.filter((flight) => flight.flightStatus === 'DEPARTED')
 })
 
 const initMap = () => {

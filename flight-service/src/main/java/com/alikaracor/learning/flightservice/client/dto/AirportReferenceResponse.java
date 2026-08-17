@@ -13,5 +13,6 @@ public class AirportReferenceResponse implements Serializable {
 
     private Long airportId;
     private String airportStatus;
+    private String airportTimezone;
 
 }

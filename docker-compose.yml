@@ -102,6 +102,12 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   flight-service:
       build:
@@ -135,7 +141,7 @@ services:
         kafka:
           condition: service_healthy
         reference-manager:
-          condition: service_started
+          condition: service_healthy
 
   flight-archive-service:
       build:

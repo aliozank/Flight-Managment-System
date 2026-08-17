@@ -3,7 +3,7 @@ package com.alikaracor.learning.flight_archive_service.model;
 public enum FlightStatus {
 
     SCHEDULED,
-    BOARDING,
+    DELAYED,
     DEPARTED,
     ARRIVED,
     CANCELLED

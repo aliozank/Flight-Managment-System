@@ -7,6 +7,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.client.RestClient;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 @Configuration
 public class ReferenceManagerClientConfig {
@@ -19,6 +21,24 @@ public class ReferenceManagerClientConfig {
 
         return RestClient.builder()
                 .baseUrl(referenceManagerBaseUrl)
+                .defaultStatusHandler(
+                        statusCode -> statusCode.is4xxClientError(),
+                        (request, response) -> {
+                            throw new ResponseStatusException(
+                                    response.getStatusCode(),
+                                    "Reference Manager request failed"
+                            );
+                        }
+                )
+                .defaultStatusHandler(
+                        statusCode -> statusCode.is5xxServerError(),
+                        (request, response) -> {
+                            throw new ResponseStatusException(
+                                    HttpStatus.BAD_GATEWAY,
+                                    "Reference Manager service failed"
+                            );
+                        }
+                )
                 .requestInterceptor((request, body, execution) -> {
 
                     Authentication authentication =

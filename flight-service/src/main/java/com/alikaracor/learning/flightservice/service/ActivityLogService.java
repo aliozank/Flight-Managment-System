@@ -136,6 +136,19 @@ public class ActivityLogService {
         );
     }
 
+    public void logAutomaticFlightStatusUpdated(Long flightId) {
+
+        saveActivityLog(
+                null,
+                ActivityAction.FLIGHT_STATUS_AUTO_UPDATED,
+                ActivityResourceType.FLIGHT,
+                flightId,
+                true,
+                null,
+                null
+        );
+    }
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void logFlightUpdateFailure(Long performedByUserId,Long updatedFlightId, String failureReason, String clientIpAddress) {
 
@@ -147,6 +160,20 @@ public class ActivityLogService {
                 false,
                 failureReason,
                 clientIpAddress
+        );
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void logAutomaticFlightStatusUpdateFailure(Long flightId, String failureReason) {
+
+        saveActivityLog(
+                null,
+                ActivityAction.FLIGHT_STATUS_AUTO_UPDATE_FAILED,
+                ActivityResourceType.FLIGHT,
+                flightId,
+                false,
+                failureReason,
+                null
         );
     }
 

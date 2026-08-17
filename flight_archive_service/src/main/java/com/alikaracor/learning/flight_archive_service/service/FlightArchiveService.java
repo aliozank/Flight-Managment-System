@@ -27,6 +27,8 @@ public class FlightArchiveService {
     @Transactional
     public void archiveFlight(FlightEvent flightEvent) {
 
+        validateFlightEvent(flightEvent);
+
         if (flightArchiveRepository.existsByEventId(flightEvent.getEventId())) {
 
             return;
@@ -71,6 +73,10 @@ public class FlightArchiveService {
         archivedFlight.setChangedByUserId(flightEvent.getChangedByUserId());
         archivedFlight.setEventOccurredAt(flightEvent.getOccurredAt());
 
+        archivedFlight.setScheduledArrivalDate(flightEvent.getScheduledArrivalDate());
+        archivedFlight.setScheduledDepartureAt(flightEvent.getScheduledDepartureAt());
+        archivedFlight.setScheduledArrivalAt(flightEvent.getScheduledArrivalAt());
+
         flightArchiveRepository.save(archivedFlight);
 
     }
@@ -104,4 +110,51 @@ public class FlightArchiveService {
 
         return archiveFlightMapper.toArchivedFlightResponse(archivedFlight);
     }
+
+    private void validateFlightEvent(FlightEvent flightEvent) {
+
+        if (flightEvent == null) {
+
+            throw new IllegalArgumentException("Flight event cannot be null");
+
+        }
+
+        if (flightEvent.getEventId() == null
+                || flightEvent.getFlightId() == null
+                || flightEvent.getFlightStatus() == null
+                || flightEvent.getFlightVersion() == null
+                || flightEvent.getFlightVersion() < 1) {
+
+            throw new IllegalArgumentException("Flight event identity/status fields are missing");
+
+        }
+
+        boolean finalStatus = flightEvent.getFlightStatus() == FlightStatus.ARRIVED || flightEvent.getFlightStatus() == FlightStatus.CANCELLED;
+
+        if (!finalStatus) {
+
+            return;
+
+        }
+
+        if (flightEvent.getFlightNumber() == null
+                || flightEvent.getFlightNumber().isBlank()
+                || flightEvent.getAirlineId() == null
+                || flightEvent.getAircraftTypeId() == null
+                || flightEvent.getOriginAirportId() == null
+                || flightEvent.getDestinationAirportId() == null
+                || flightEvent.getFlightTypeId() == null
+                || flightEvent.getFlightDate() == null
+                || flightEvent.getScheduledDepartureTime() == null
+                || flightEvent.getScheduledArrivalDate() == null
+                || flightEvent.getScheduledArrivalTime() == null
+                || flightEvent.getScheduledDepartureAt() == null
+                || flightEvent.getScheduledArrivalAt() == null
+                || flightEvent.getOccurredAt() == null) {
+
+            throw new IllegalArgumentException("Final flight event contains missing archive fields");
+
+        }
+    }
+
 }

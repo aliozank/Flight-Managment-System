@@ -5,6 +5,7 @@ import com.alikaracor.learning.flightservice.client.dto.*;
 import com.alikaracor.learning.flightservice.dto.FlightCreateRequest;
 import com.alikaracor.learning.flightservice.dto.FlightResponse;
 import com.alikaracor.learning.flightservice.dto.MockFlightGenerationRequest;
+import com.alikaracor.learning.flightservice.dto.MockFlightGenerationResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -84,14 +85,23 @@ class MockFlightGeneratorServiceTest {
         when(referenceManagerClient.getAllFlightTypes()).thenReturn(List.of(activeFlightType));
         when(referenceManagerClient.getAirlineById(10L)).thenReturn(activeAirline);
 
+        AirportReferenceResponse mockAirport = new AirportReferenceResponse();
+        mockAirport.setAirportId(1L);
+        mockAirport.setAirportTimezone("Europe/Istanbul");
+        when(referenceManagerClient.getAirportById(anyLong())).thenReturn(mockAirport);
+
         FlightResponse mockResponse = new FlightResponse();
         mockResponse.setFlightId(1L);
         when(flightService.addFlight(any(FlightCreateRequest.class), eq(performedByUserId), eq(clientIpAddress)))
                 .thenReturn(mockResponse);
 
-        List<FlightResponse> result = mockFlightGeneratorService.generateFlights(generationRequest, performedByUserId, clientIpAddress);
+        MockFlightGenerationResponse result = mockFlightGeneratorService.generateFlights(generationRequest, performedByUserId, clientIpAddress);
 
-        assertThat(result).hasSize(2);
+        assertThat(result.getRequestedCount()).isEqualTo(2);
+        assertThat(result.getSuccessfulCount()).isEqualTo(2);
+        assertThat(result.getFailedCount()).isZero();
+        assertThat(result.getSuccessfulFlights()).hasSize(2);
+        assertThat(result.getErrors()).isEmpty();
 
         ArgumentCaptor<FlightCreateRequest> requestCaptor = ArgumentCaptor.forClass(FlightCreateRequest.class);
         verify(flightService, times(2)).addFlight(requestCaptor.capture(), eq(performedByUserId), eq(clientIpAddress));
@@ -155,8 +165,8 @@ class MockFlightGeneratorServiceTest {
     }
 
     @Test
-    @DisplayName("generateFlights - Seçilen uçak pasif bir havayoluna bağlıysa 400 BAD_REQUEST fırlatmalıdır")
-    void generateFlights_shouldThrowBadRequest_whenSelectedAircraftHasInactiveOperatorAirline() {
+    @DisplayName("generateFlights - Seçilen uçak pasif bir havayoluna bağlıysa hataları raporlamalıdır")
+    void generateFlights_shouldReportFailures_whenSelectedAircraftHasInactiveOperatorAirline() {
         when(referenceManagerClient.getAllAircrafts()).thenReturn(List.of(activeAircraft));
         when(referenceManagerClient.getAllRoutes()).thenReturn(List.of(activeRoute));
         when(referenceManagerClient.getAllFlightTypes()).thenReturn(List.of(activeFlightType));
@@ -164,10 +174,17 @@ class MockFlightGeneratorServiceTest {
         activeAirline.setAirlineStatus("INACTIVE");
         when(referenceManagerClient.getAirlineById(10L)).thenReturn(activeAirline);
 
-        assertThatThrownBy(() -> mockFlightGeneratorService.generateFlights(generationRequest, performedByUserId, clientIpAddress))
-                .isInstanceOf(ResponseStatusException.class)
-                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
-                .isEqualTo(HttpStatus.BAD_REQUEST);
+        MockFlightGenerationResponse result = mockFlightGeneratorService.generateFlights(
+                generationRequest,
+                performedByUserId,
+                clientIpAddress
+        );
+
+        assertThat(result.getRequestedCount()).isEqualTo(2);
+        assertThat(result.getSuccessfulCount()).isZero();
+        assertThat(result.getFailedCount()).isEqualTo(2);
+        assertThat(result.getSuccessfulFlights()).isEmpty();
+        assertThat(result.getErrors()).hasSize(2);
 
         verifyNoInteractions(flightService);
     }

@@ -1,9 +1,6 @@
 package com.alikaracor.learning.flightservice.controller;
 
-import com.alikaracor.learning.flightservice.dto.FlightCreateRequest;
-import com.alikaracor.learning.flightservice.dto.FlightCsvImportResponse;
-import com.alikaracor.learning.flightservice.dto.FlightResponse;
-import com.alikaracor.learning.flightservice.dto.FlightUpdateRequest;
+import com.alikaracor.learning.flightservice.dto.*;
 import com.alikaracor.learning.flightservice.service.FlightCsvImportService;
 import com.alikaracor.learning.flightservice.service.FlightService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -56,7 +53,7 @@ public class FlightController {
     }
 
     @PutMapping("/{flightId}")
-    public FlightResponse updateFlightById(@PathVariable Long flightId, @RequestBody @Valid FlightUpdateRequest flightUpdateRequest, @AuthenticationPrincipal Jwt jwt, HttpServletRequest httpServletRequest) {
+    public FlightResponse updateFlightById(@PathVariable Long flightId, @RequestBody @Valid FlightUpdateRequest flightUpdateRequest,@AuthenticationPrincipal Jwt jwt, HttpServletRequest httpServletRequest) {
 
         Long performedByUserId = Long.valueOf(jwt.getSubject());
 
@@ -84,11 +81,17 @@ public class FlightController {
         Long performedByUserId = Long.valueOf(jwt.getSubject());
         String clientIpAddress = httpServletRequest.getRemoteAddr();
 
-        return flightCsvImportService.importFlights(
-                file,
-                performedByUserId,
-                clientIpAddress
-        );
+        return flightCsvImportService.importFlights(file, performedByUserId, clientIpAddress);
+    }
+
+    @PatchMapping("/{flightId}/status")
+    public FlightResponse updateFlightStatus(@PathVariable Long flightId, @Valid @RequestBody FlightStatusUpdateRequest flightStatusUpdateRequest, @AuthenticationPrincipal Jwt jwt, HttpServletRequest httpServletRequest) {
+
+        Long performedByUserId = Long.valueOf(jwt.getSubject());
+        String clientIpAddress = httpServletRequest.getRemoteAddr();
+
+        return flightService.updateFlightStatus(flightId, flightStatusUpdateRequest, performedByUserId, clientIpAddress);
+
     }
 
 }

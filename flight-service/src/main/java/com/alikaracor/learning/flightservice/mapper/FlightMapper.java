@@ -18,6 +18,9 @@ public interface FlightMapper {
     @Mapping(target = "flightVersion", ignore = true)
     @Mapping(target = "flightCreatedAt", ignore = true)
     @Mapping(target = "flightUpdatedAt", ignore = true)
+    @Mapping(target = "scheduledDepartureAt", ignore = true)
+    @Mapping(target = "scheduledArrivalAt", ignore = true)
+
     Flight toFlight(FlightCreateRequest flightCreateRequest);
 
     FlightResponse toFlightResponse(Flight flight);
@@ -26,6 +29,9 @@ public interface FlightMapper {
     @Mapping(target = "flightVersion", ignore = true)
     @Mapping(target = "flightCreatedAt", ignore = true)
     @Mapping(target = "flightUpdatedAt", ignore = true)
+    @Mapping(target = "flightStatus", ignore = true)
+    @Mapping(target = "scheduledDepartureAt", ignore = true)
+    @Mapping(target = "scheduledArrivalAt", ignore = true)
     void updateFlight(FlightUpdateRequest flightUpdateRequest, @MappingTarget Flight flight);
 
     @Mapping(target = "flightVersionId", ignore = true)

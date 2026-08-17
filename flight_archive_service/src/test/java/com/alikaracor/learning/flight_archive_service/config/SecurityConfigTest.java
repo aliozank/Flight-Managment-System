@@ -85,10 +85,10 @@ class SecurityConfigTest {
     }
 
     @Test
-    @DisplayName("GET /actuator/prometheus - Tokensız istek 401 Unauthorized almalıdır")
-    void prometheusEndpoint_shouldReturn401_whenUnauthenticated() throws Exception {
+    @DisplayName("GET /actuator/prometheus - permitAll olduğu için anonim erişimde 404 Not Found dönmelidir (controller MockMvc'de olmadığından)")
+    void prometheusEndpoint_shouldReturn404_whenUnauthenticated() throws Exception {
         mockMvc.perform(get("/actuator/prometheus"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isNotFound());
     }
 
     @Test

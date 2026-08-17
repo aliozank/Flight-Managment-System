@@ -42,6 +42,10 @@ const handleViewDetail = (item: ArchivedFlightResponse) => {
   selectedArchiveItem.value = item
   drawerVisible.value = true
 }
+
+const formatUtc = (value: string) => {
+  return `${new Date(value).toLocaleString('tr-TR', { timeZone: 'UTC' })} UTC`
+}
 </script>
 
 <template>
@@ -71,6 +75,14 @@ const handleViewDetail = (item: ArchivedFlightResponse) => {
 
         <el-table-column prop="flightDate" label="Tarih" width="120" />
 
+        <el-table-column label="Planlanan Zaman" min-width="190">
+          <template #default="{ row }">
+            {{ row.flightDate }} {{ row.scheduledDepartureTime?.substring(0, 5) }}
+            ➔
+            {{ row.scheduledArrivalDate }} {{ row.scheduledArrivalTime?.substring(0, 5) }}
+          </template>
+        </el-table-column>
+
         <el-table-column label="Güzergah" min-width="200">
           <template #default="{ row }">
             {{ referenceStore.getAirportCode(row.originAirportId) }} ➔ {{ referenceStore.getAirportCode(row.destinationAirportId) }}
@@ -97,7 +109,9 @@ const handleViewDetail = (item: ArchivedFlightResponse) => {
 
         <el-table-column label="İşlem Yapan User ID" width="150" align="center">
           <template #default="{ row }">
-            <el-tag size="small" effect="plain">User #{{ row.changedByUserId }}</el-tag>
+            <el-tag size="small" effect="plain">
+              {{ row.changedByUserId == null ? 'Sistem' : `User #${row.changedByUserId}` }}
+            </el-tag>
           </template>
         </el-table-column>
 
@@ -132,12 +146,15 @@ const handleViewDetail = (item: ArchivedFlightResponse) => {
           <el-descriptions-item label="Kalkış Havalimanı">{{ referenceStore.getAirportLabel(selectedArchiveItem.originAirportId) }}</el-descriptions-item>
           <el-descriptions-item label="Varış Havalimanı">{{ referenceStore.getAirportLabel(selectedArchiveItem.destinationAirportId) }}</el-descriptions-item>
           <el-descriptions-item label="Uçuş Tarihi">{{ selectedArchiveItem.flightDate }}</el-descriptions-item>
-          <el-descriptions-item label="STD / STA">{{ selectedArchiveItem.scheduledDepartureTime }} - {{ selectedArchiveItem.scheduledArrivalTime }}</el-descriptions-item>
+          <el-descriptions-item label="Planlanan Kalkış">{{ selectedArchiveItem.flightDate }} {{ selectedArchiveItem.scheduledDepartureTime }}</el-descriptions-item>
+          <el-descriptions-item label="Planlanan Varış">{{ selectedArchiveItem.scheduledArrivalDate }} {{ selectedArchiveItem.scheduledArrivalTime }}</el-descriptions-item>
+          <el-descriptions-item label="Kalkış (UTC)">{{ formatUtc(selectedArchiveItem.scheduledDepartureAt) }}</el-descriptions-item>
+          <el-descriptions-item label="Varış (UTC)">{{ formatUtc(selectedArchiveItem.scheduledArrivalAt) }}</el-descriptions-item>
           <el-descriptions-item label="Flight Status">
             <StatusTag :status="selectedArchiveItem.flightStatus" />
           </el-descriptions-item>
           <el-descriptions-item label="Flight Version">v{{ selectedArchiveItem.flightVersion }}</el-descriptions-item>
-          <el-descriptions-item label="Changed By User">User #{{ selectedArchiveItem.changedByUserId }}</el-descriptions-item>
+          <el-descriptions-item label="Changed By">{{ selectedArchiveItem.changedByUserId == null ? 'Sistem' : `User #${selectedArchiveItem.changedByUserId}` }}</el-descriptions-item>
           <el-descriptions-item label="Archived At">{{ new Date(selectedArchiveItem.archivedAt).toLocaleString('tr-TR') }}</el-descriptions-item>
         </el-descriptions>
       </div>

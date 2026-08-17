@@ -27,7 +27,7 @@ referenceApi.interceptors.response.use(
       if (status === 401) {
         localStorage.removeItem('accessToken')
         localStorage.removeItem('authUser')
-        ElMessage.error('Oturum süreniz doldu, lütfen tekrar giriş yapın.')
+        ElMessage.error('[401] Oturum süreniz doldu, lütfen tekrar giriş yapın.')
         if (router.currentRoute.value.path !== '/login') {
           await router.push('/login')
         }
@@ -35,12 +35,13 @@ referenceApi.interceptors.response.use(
       }
 
       if (status === 403) {
-        ElMessage.error('Bu işlem için gerekli yetkiniz bulunmamaktadır (403 Forbidden).')
+        ElMessage.error('[403] Bu işlem için gerekli yetkiniz bulunmamaktadır.')
         return Promise.reject(error)
       }
 
-      const msg = data?.message || data?.error || `Referans verisi işlemi başarısız (${status})`
-      ElMessage.error(msg)
+      const backendStatus = data?.status || status
+      const backendMessage = data?.message || data?.error || 'Referans verisi işlemi başarısız'
+      ElMessage.error(`[${backendStatus}] ${backendMessage}`)
     } else {
       ElMessage.error('Referans servisine bağlanılamadı')
     }

@@ -13,10 +13,13 @@ export interface ArchivedFlightResponse {
   flightTypeId: number
   flightDate: string
   scheduledDepartureTime: string
+  scheduledArrivalDate: string
   scheduledArrivalTime: string
+  scheduledDepartureAt: string
+  scheduledArrivalAt: string
   flightStatus: FlightStatus
   flightVersion: number
-  changedByUserId: number
+  changedByUserId: number | null
   eventOccurredAt: string
   archivedAt: string
 }

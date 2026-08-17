@@ -4,6 +4,7 @@ import com.alikaracor.learning.flightservice.config.SecurityConfig;
 import com.alikaracor.learning.flightservice.dto.FlightCreateRequest;
 import com.alikaracor.learning.flightservice.dto.FlightCsvImportResponse;
 import com.alikaracor.learning.flightservice.dto.FlightResponse;
+import com.alikaracor.learning.flightservice.dto.FlightStatusUpdateRequest;
 import com.alikaracor.learning.flightservice.dto.FlightUpdateRequest;
 import com.alikaracor.learning.flightservice.model.FlightStatus;
 import com.alikaracor.learning.flightservice.service.FlightCsvImportService;
@@ -73,7 +74,8 @@ class FlightControllerTest {
                   "flightTypeId": 5,
                   "flightDate": "2026-10-01",
                   "scheduledDepartureTime": "10:00:00",
-                  "scheduledArrivalTime": "12:00:00"
+                  "scheduledArrivalTime": "12:00:00",
+                  "scheduledArrivalDate": "2026-10-01"
                 }
                 """;
 
@@ -87,7 +89,8 @@ class FlightControllerTest {
                   "flightTypeId": 5,
                   "flightDate": "2026-10-01",
                   "scheduledDepartureTime": "10:00:00",
-                  "scheduledArrivalTime": "12:00:00"
+                  "scheduledArrivalTime": "12:00:00",
+                  "scheduledArrivalDate": "2026-10-01"
                 }
                 """;
 
@@ -102,7 +105,7 @@ class FlightControllerTest {
                   "flightDate": "2026-10-01",
                   "scheduledDepartureTime": "11:00:00",
                   "scheduledArrivalTime": "13:00:00",
-                  "flightStatus": "SCHEDULED"
+                  "scheduledArrivalDate": "2026-10-01"
                 }
                 """;
     }
@@ -228,5 +231,44 @@ class FlightControllerTest {
                         .with(jwt().jwt(j -> j.subject("100")).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalRowCount").value(1));
+    }
+
+    // ==================== PATCH /api/flights/{id}/status Tests ====================
+
+    @Test
+    @DisplayName("PATCH /api/flights/{id}/status - OPERATIONS veya ADMIN yetkisi ve geçerli durum ile 200 OK dönmelidir")
+    void updateFlightStatus_shouldReturn200_whenUserIsAuthorizedAndPayloadIsValid() throws Exception {
+        when(flightService.updateFlightStatus(eq(1L), any(FlightStatusUpdateRequest.class), eq(100L), any()))
+                .thenReturn(sampleResponse);
+
+        mockMvc.perform(patch("/api/flights/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"flightStatus\": \"DELAYED\"}")
+                        .with(jwt().jwt(j -> j.subject("100")).authorities(new SimpleGrantedAuthority("ROLE_OPERATIONS"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.flightId").value(1L))
+                .andExpect(jsonPath("$.flightNumber").value("TK1234"));
+
+        verify(flightService).updateFlightStatus(eq(1L), any(FlightStatusUpdateRequest.class), eq(100L), any());
+    }
+
+    @Test
+    @DisplayName("PATCH /api/flights/{id}/status - Yetkisiz rol (örn. BI_ANALYST) 403 Forbidden almalıdır")
+    void updateFlightStatus_shouldReturn403_whenUserIsUnauthorized() throws Exception {
+        mockMvc.perform(patch("/api/flights/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"flightStatus\": \"DELAYED\"}")
+                        .with(jwt().jwt(j -> j.subject("100")).authorities(new SimpleGrantedAuthority("ROLE_BI_ANALYST"))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("PATCH /api/flights/{id}/status - Boş veya geçersiz JSON gövdesinde 400 Bad Request dönmelidir")
+    void updateFlightStatus_shouldReturn400_whenPayloadIsInvalid() throws Exception {
+        mockMvc.perform(patch("/api/flights/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                        .with(jwt().jwt(j -> j.subject("100")).authorities(new SimpleGrantedAuthority("ROLE_OPERATIONS"))))
+                .andExpect(status().isBadRequest());
     }
 }

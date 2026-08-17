@@ -11,7 +11,10 @@ export interface FlightResponse {
     flightTypeId: number
     flightDate: string
     scheduledDepartureTime: string
+    scheduledArrivalDate: string
     scheduledArrivalTime: string
+    scheduledDepartureAt: string
+    scheduledArrivalAt: string
     flightStatus: FlightStatus
     flightVersion: number
     flightCreatedAt?: string
@@ -28,6 +31,7 @@ export interface FlightCreateRequest {
     flightTypeId: number | null
     flightDate: string
     scheduledDepartureTime: string
+    scheduledArrivalDate: string
     scheduledArrivalTime: string
 }
 
@@ -41,7 +45,11 @@ export interface FlightUpdateRequest {
     flightTypeId: number
     flightDate: string
     scheduledDepartureTime: string
+    scheduledArrivalDate: string
     scheduledArrivalTime: string
+}
+
+export interface FlightStatusUpdateRequest {
     flightStatus: FlightStatus
 }
 
@@ -58,3 +66,10 @@ export interface MockFlightGenerationRequest {
     maximumFutureDays: number
 }
 
+export interface MockFlightGenerationResponse {
+    requestedCount: number
+    successfulCount: number
+    failedCount: number
+    successfulFlights: FlightResponse[]
+    errors: string[]
+}

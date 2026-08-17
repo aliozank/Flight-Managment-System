@@ -47,7 +47,7 @@ class FlightCsvImportServiceTest {
     void setUp() {
         actorUserId = 100L;
         clientIpAddress = "127.0.0.1";
-        csvHeader = "flightNumber,airlineId,aircraftId,aircraftTypeId,originAirportId,destinationAirportId,flightTypeId,flightDate,scheduledDepartureTime,scheduledArrivalTime\n";
+        csvHeader = "flightNumber,airlineId,aircraftId,aircraftTypeId,originAirportId,destinationAirportId,flightTypeId,flightDate,scheduledDepartureTime,scheduledArrivalTime,scheduledArrivalDate\n";
     }
 
     @Test
@@ -83,8 +83,8 @@ class FlightCsvImportServiceTest {
     @DisplayName("importFlights - Geçerli CSV yüklendiğinde tüm uçuşlar başarıyla eklenmelidir")
     void importFlights_shouldImportFlightsSuccessfully_whenCsvIsValid() {
         String csvContent = csvHeader
-                + "TK1234,10,100,20,1,2,5,2026-10-01,10:00,12:00\n"
-                + "TK5678,10,,20,1,3,5,2026-10-02,14:00,16:00";
+                + "TK1234,10,100,20,1,2,5,2026-10-01,10:00,12:00,2026-10-01\n"
+                + "TK5678,10,,20,1,3,5,2026-10-02,14:00,16:00,2026-10-02";
 
         MockMultipartFile file = new MockMultipartFile("file", "flights.csv", "text/csv", csvContent.getBytes(StandardCharsets.UTF_8));
 
@@ -118,8 +118,8 @@ class FlightCsvImportServiceTest {
     @DisplayName("importFlights - Satırlardan biri hata aldığında kısmi başarı raporlanmalıdır")
     void importFlights_shouldHandlePartialErrors_whenSomeRowsFailValidationOrService() {
         String csvContent = csvHeader
-                + "TK1234,10,100,20,1,2,5,2026-10-01,10:00,12:00\n"
-                + "TK5678,10,101,20,1,3,5,2026-10-02,14:00,16:00";
+                + "TK1234,10,100,20,1,2,5,2026-10-01,10:00,12:00,2026-10-01\n"
+                + "TK5678,10,101,20,1,3,5,2026-10-02,14:00,16:00,2026-10-02";
 
         MockMultipartFile file = new MockMultipartFile("file", "flights.csv", "text/csv", csvContent.getBytes(StandardCharsets.UTF_8));
 
@@ -144,7 +144,7 @@ class FlightCsvImportServiceTest {
     @Test
     @DisplayName("importFlights - Tarih/saat parse hatası olduğunda hata listesine eklenmeli ve işleme devam etmelidir")
     void importFlights_shouldRecordParseError_whenDateFieldIsInvalid() {
-        String csvContent = csvHeader + "TK1234,10,100,20,1,2,5,INVALID_DATE,10:00,12:00";
+        String csvContent = csvHeader + "TK1234,10,100,20,1,2,5,INVALID_DATE,10:00,12:00,2026-10-01";
 
         MockMultipartFile file = new MockMultipartFile("file", "flights.csv", "text/csv", csvContent.getBytes(StandardCharsets.UTF_8));
 
@@ -161,7 +161,7 @@ class FlightCsvImportServiceTest {
     @Test
     @DisplayName("importFlights - Bean Validation ihlali olduğunda hata kaydı yapılmalıdır")
     void importFlights_shouldRecordValidationError_whenValidatorReturnsViolations() {
-        String csvContent = csvHeader + "INVALID,10,100,20,1,2,5,2026-10-01,10:00,12:00";
+        String csvContent = csvHeader + "INVALID,10,100,20,1,2,5,2026-10-01,10:00,12:00,2026-10-01";
 
         MockMultipartFile file = new MockMultipartFile("file", "flights.csv", "text/csv", csvContent.getBytes(StandardCharsets.UTF_8));
 

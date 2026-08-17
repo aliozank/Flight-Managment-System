@@ -40,6 +40,9 @@ class ArchiveFlightMapperTest {
         archivedFlight.setChangedByUserId(99L);
         archivedFlight.setEventOccurredAt(Instant.now());
         archivedFlight.setArchivedAt(Instant.now());
+        archivedFlight.setScheduledArrivalDate(LocalDate.of(2026, 10, 1));
+        archivedFlight.setScheduledDepartureAt(Instant.parse("2026-10-01T10:00:00Z"));
+        archivedFlight.setScheduledArrivalAt(Instant.parse("2026-10-01T12:00:00Z"));
 
         ArchivedFlightResponse response = mapper.toArchivedFlightResponse(archivedFlight);
 
@@ -62,5 +65,8 @@ class ArchiveFlightMapperTest {
         assertThat(response.getChangedByUserId()).isEqualTo(archivedFlight.getChangedByUserId());
         assertThat(response.getEventOccurredAt()).isEqualTo(archivedFlight.getEventOccurredAt());
         assertThat(response.getArchivedAt()).isEqualTo(archivedFlight.getArchivedAt());
+        assertThat(response.getScheduledArrivalDate()).isEqualTo(archivedFlight.getScheduledArrivalDate());
+        assertThat(response.getScheduledDepartureAt()).isEqualTo(archivedFlight.getScheduledDepartureAt());
+        assertThat(response.getScheduledArrivalAt()).isEqualTo(archivedFlight.getScheduledArrivalAt());
     }
 }
