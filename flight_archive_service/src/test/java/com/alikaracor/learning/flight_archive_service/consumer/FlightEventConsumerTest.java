@@ -21,9 +21,21 @@ class FlightEventConsumerTest {
     private FlightEventConsumer flightEventConsumer;
 
     @Test
-    @DisplayName("consume - Gelen FlightEvent nesnesini FlightArchiveService.archiveFlight metoduna iletmelidir")
-    void consume_shouldPassFlightEventToFlightArchiveService() {
+    @DisplayName("consume - ARRIVED statüsündeki FlightEvent nesnesini FlightArchiveService.archiveFlight metoduna iletmelidir")
+    void consume_shouldPassFlightEventToFlightArchiveService_forArrived() {
         FlightEvent flightEvent = new FlightEvent();
+        flightEvent.setFlightStatus(com.alikaracor.learning.flight_archive_service.model.FlightStatus.ARRIVED);
+
+        flightEventConsumer.consume(flightEvent);
+
+        verify(flightArchiveService).archiveFlight(flightEvent);
+    }
+
+    @Test
+    @DisplayName("consume - CANCELLED statüsündeki FlightEvent nesnesini FlightArchiveService.archiveFlight metoduna iletmelidir")
+    void consume_shouldPassFlightEventToFlightArchiveService_forCancelled() {
+        FlightEvent flightEvent = new FlightEvent();
+        flightEvent.setFlightStatus(com.alikaracor.learning.flight_archive_service.model.FlightStatus.CANCELLED);
 
         flightEventConsumer.consume(flightEvent);
 

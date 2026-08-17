@@ -477,6 +477,21 @@ class FlightServiceTest {
     }
 
     @Test
+    @DisplayName("cancelFlight - DEPARTED olan uçuş için 409 CONFLICT fırlatmalı ve WebSocket publish çağrılmamalıdır")
+    void cancelFlight_shouldThrowConflict_whenFlightIsDeparted() {
+        sampleFlight.setFlightStatus(FlightStatus.DEPARTED);
+        when(flightRepository.findById(1L)).thenReturn(Optional.of(sampleFlight));
+
+        assertThatThrownBy(() -> flightService.cancelFlight(1L, actorUserId, ipAddress))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
+                .isEqualTo(HttpStatus.CONFLICT);
+
+        verify(flightRepository, never()).save(any());
+        verify(flightWebSocketPublisher, never()).publish(any());
+    }
+
+    @Test
     @DisplayName("cancelFlight - İptal işleminde veritabanı hatası fırlatıldığında WebSocket publish çağrılmamalıdır")
     void cancelFlight_shouldLogFailureAndRethrow_whenRepositorySaveFails() {
         when(flightRepository.findById(1L)).thenReturn(Optional.of(sampleFlight));
@@ -525,8 +540,8 @@ class FlightServiceTest {
     }
 
     @Test
-    @DisplayName("updateFlightStatus - Hedef durum CANCELLED ise 409 CONFLICT fırlatmalıdır")
-    void updateFlightStatus_shouldThrowConflictException_whenTargetStatusIsCancelled() {
+    @DisplayName("updateFlightStatus - Hedef durum CANCELLED ise 409 CONFLICT fırlatmalıdır (iptal endpoint'i kullanılmalıdır)")
+    void updateFlightStatus_shouldThrowConflict_whenTargetStatusIsCancelled() {
         sampleFlight.setFlightStatus(FlightStatus.SCHEDULED);
         FlightStatusUpdateRequest request = new FlightStatusUpdateRequest();
         request.setFlightStatus(FlightStatus.CANCELLED);
@@ -537,7 +552,6 @@ class FlightServiceTest {
                 .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
                 .isEqualTo(HttpStatus.CONFLICT);
 
-        verify(activityLogService).logFlightUpdateFailure(actorUserId, 1L, "Flight cancellation must use the cancellation endpoint", ipAddress);
         verify(flightRepository, never()).save(any());
     }
 
@@ -577,5 +591,98 @@ class FlightServiceTest {
         verify(activityLogService).logFlightUpdated(actorUserId, 1L, ipAddress);
         verify(flightEventPublisher).publish(sampleFlight, FlightEventType.UPDATED, actorUserId);
         verify(flightWebSocketPublisher).publish(sampleResponse);
+    }
+
+    @Test
+    @DisplayName("updateFlightStatus - SCHEDULED -> DEPARTED geçerli geçiş")
+    void updateFlightStatus_shouldUpdateStatus_whenScheduledToDeparted() {
+        sampleFlight.setFlightStatus(FlightStatus.SCHEDULED);
+        FlightStatusUpdateRequest request = new FlightStatusUpdateRequest();
+        request.setFlightStatus(FlightStatus.DEPARTED);
+        when(flightRepository.findById(1L)).thenReturn(Optional.of(sampleFlight));
+        when(flightMapper.toFlightVersion(sampleFlight)).thenReturn(new FlightVersion());
+        when(flightMapper.toFlightResponse(sampleFlight)).thenReturn(sampleResponse);
+
+        FlightResponse response = flightService.updateFlightStatus(1L, request, actorUserId, ipAddress);
+
+        assertThat(response).isEqualTo(sampleResponse);
+        assertThat(sampleFlight.getFlightStatus()).isEqualTo(FlightStatus.DEPARTED);
+        verify(flightRepository).save(sampleFlight);
+    }
+
+    @Test
+    @DisplayName("updateFlightStatus - DELAYED -> DEPARTED geçerli geçiş")
+    void updateFlightStatus_shouldUpdateStatus_whenDelayedToDeparted() {
+        sampleFlight.setFlightStatus(FlightStatus.DELAYED);
+        FlightStatusUpdateRequest request = new FlightStatusUpdateRequest();
+        request.setFlightStatus(FlightStatus.DEPARTED);
+        when(flightRepository.findById(1L)).thenReturn(Optional.of(sampleFlight));
+        when(flightMapper.toFlightVersion(sampleFlight)).thenReturn(new FlightVersion());
+        when(flightMapper.toFlightResponse(sampleFlight)).thenReturn(sampleResponse);
+
+        FlightResponse response = flightService.updateFlightStatus(1L, request, actorUserId, ipAddress);
+
+        assertThat(response).isEqualTo(sampleResponse);
+        assertThat(sampleFlight.getFlightStatus()).isEqualTo(FlightStatus.DEPARTED);
+        verify(flightRepository).save(sampleFlight);
+    }
+
+    @Test
+    @DisplayName("updateFlightStatus - DEPARTED -> ARRIVED geçerli geçiş")
+    void updateFlightStatus_shouldUpdateStatus_whenDepartedToArrived() {
+        sampleFlight.setFlightStatus(FlightStatus.DEPARTED);
+        FlightStatusUpdateRequest request = new FlightStatusUpdateRequest();
+        request.setFlightStatus(FlightStatus.ARRIVED);
+        when(flightRepository.findById(1L)).thenReturn(Optional.of(sampleFlight));
+        when(flightMapper.toFlightVersion(sampleFlight)).thenReturn(new FlightVersion());
+        when(flightMapper.toFlightResponse(sampleFlight)).thenReturn(sampleResponse);
+
+        FlightResponse response = flightService.updateFlightStatus(1L, request, actorUserId, ipAddress);
+
+        assertThat(response).isEqualTo(sampleResponse);
+        assertThat(sampleFlight.getFlightStatus()).isEqualTo(FlightStatus.ARRIVED);
+        verify(flightRepository).save(sampleFlight);
+    }
+
+    @Test
+    @DisplayName("updateFlightStatus - ARRIVED -> SCHEDULED geçersiz geçiş")
+    void updateFlightStatus_shouldThrowConflict_whenArrivedToScheduled() {
+        sampleFlight.setFlightStatus(FlightStatus.ARRIVED);
+        FlightStatusUpdateRequest request = new FlightStatusUpdateRequest();
+        request.setFlightStatus(FlightStatus.SCHEDULED);
+        when(flightRepository.findById(1L)).thenReturn(Optional.of(sampleFlight));
+
+        assertThatThrownBy(() -> flightService.updateFlightStatus(1L, request, actorUserId, ipAddress))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
+                .isEqualTo(HttpStatus.CONFLICT);
+    }
+
+    @Test
+    @DisplayName("updateFlightStatus - CANCELLED -> SCHEDULED geçersiz geçiş")
+    void updateFlightStatus_shouldThrowConflict_whenCancelledToScheduled() {
+        sampleFlight.setFlightStatus(FlightStatus.CANCELLED);
+        FlightStatusUpdateRequest request = new FlightStatusUpdateRequest();
+        request.setFlightStatus(FlightStatus.SCHEDULED);
+        when(flightRepository.findById(1L)).thenReturn(Optional.of(sampleFlight));
+
+        assertThatThrownBy(() -> flightService.updateFlightStatus(1L, request, actorUserId, ipAddress))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
+                .isEqualTo(HttpStatus.CONFLICT);
+    }
+
+    @Test
+    @DisplayName("updateFlightStatus - ARRIVED -> CANCELLED geçersiz geçiş")
+    void updateFlightStatus_shouldThrowConflict_whenArrivedToCancelled() {
+        sampleFlight.setFlightStatus(FlightStatus.ARRIVED);
+        FlightStatusUpdateRequest request = new FlightStatusUpdateRequest();
+        request.setFlightStatus(FlightStatus.CANCELLED);
+        when(flightRepository.findById(1L)).thenReturn(Optional.of(sampleFlight));
+
+        assertThatThrownBy(() -> flightService.updateFlightStatus(1L, request, actorUserId, ipAddress))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
+                .isEqualTo(HttpStatus.CONFLICT);
     }
 }

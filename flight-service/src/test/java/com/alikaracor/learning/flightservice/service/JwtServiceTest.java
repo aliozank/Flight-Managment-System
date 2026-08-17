@@ -73,6 +73,33 @@ class JwtServiceTest {
         assertThat(claims.getClaimAsString("username")).isEqualTo("john_admin");
         assertThat(claims.getClaimAsStringList("roles")).containsExactly("ADMIN");
         assertThat(claims.getClaimAsString("iss")).isEqualTo("flight-service");
+        assertThat(claims.getClaimAsString("jti")).isNotBlank();
+        assertThat(claims.getExpiresAt()).isNotNull();
+        assertThat(claims.getExpiresAt()).isAfter(claims.getIssuedAt());
+    }
+
+    @Test
+    @DisplayName("generateToken - Her çağrıda farklı bir jti (UUID) üretmelidir")
+    void generateToken_shouldGenerateDistinctJtiForMultipleCalls() {
+        Jwt mockJwt = Jwt.withTokenValue("jwt-token-xyz")
+                .header("alg", "RS256")
+                .claim("sub", "42")
+                .build();
+        when(jwtEncoder.encode(any(JwtEncoderParameters.class))).thenReturn(mockJwt);
+
+        jwtService.generateToken(sampleUser);
+        jwtService.generateToken(sampleUser);
+
+        ArgumentCaptor<JwtEncoderParameters> captor = ArgumentCaptor.forClass(JwtEncoderParameters.class);
+        verify(jwtEncoder, org.mockito.Mockito.times(2)).encode(captor.capture());
+
+        List<JwtEncoderParameters> captured = captor.getAllValues();
+        String jti1 = captured.get(0).getClaims().getClaimAsString("jti");
+        String jti2 = captured.get(1).getClaims().getClaimAsString("jti");
+
+        assertThat(jti1).isNotBlank();
+        assertThat(jti2).isNotBlank();
+        assertThat(jti1).isNotEqualTo(jti2);
     }
 
     @Test

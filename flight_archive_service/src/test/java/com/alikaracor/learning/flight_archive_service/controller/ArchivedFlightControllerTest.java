@@ -104,4 +104,19 @@ class ArchivedFlightControllerTest {
                         .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    @DisplayName("GET /api/archived-flights - Unauthenticated kullanıcı için 401 UNAUTHORIZED dönmelidir")
+    void getArchivedFlights_shouldReturn401_whenUnauthenticated() throws Exception {
+        mockMvc.perform(get("/api/archived-flights"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("GET /api/archived-flights - Yanlış role sahip kullanıcı için 403 FORBIDDEN dönmelidir")
+    void getArchivedFlights_shouldReturn403_whenWrongRole() throws Exception {
+        mockMvc.perform(get("/api/archived-flights")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_USER"))))
+                .andExpect(status().isForbidden());
+    }
 }

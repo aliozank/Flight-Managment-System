@@ -97,10 +97,14 @@ services:
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     depends_on:
       reference-mysql:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8081/actuator/health"]
@@ -154,11 +158,32 @@ services:
         SPRING_DATASOURCE_USERNAME: alikaracor
         SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
         SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+        REDIS_HOST: redis
+        REDIS_PORT: 6379
       depends_on:
         archive-postgres:
           condition: service_healthy
         kafka:
           condition: service_healthy
+        redis:
+          condition: service_healthy
+
+  flight-management-ui:
+    build:
+      context: ./flight-management-ui
+    image: flight-management-ui:local
+    ports:
+      - "5173:80"
+    depends_on:
+      - reference-manager
+      - flight-service
+      - flight-archive-service
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   prometheus:
     image: prom/prometheus:v3.13.0
@@ -179,8 +204,12 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/microservices-overview.json
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - prometheus
 

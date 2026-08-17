@@ -223,6 +223,46 @@ class AircraftServiceTest {
         verify(publisher, never()).publish(any(ReferenceEvent.class));
     }
 
+    @Test
+    void shouldClearOperatorAirlineWhenUpdatingWithNullOperatorId() {
+        AircraftRequest request = validRequest();
+        request.setOperatorAirlineId(null);
+        Aircraft existing = aircraft(8L, AircraftStatus.ACTIVE);
+        existing.setOperatorAirline(airline(20L));
+        AircraftType aircraftType = aircraftType(10L);
+        AircraftResponse expected = response(8L);
+
+        when(aircraftRepository.findById(8L)).thenReturn(Optional.of(existing));
+        when(aircraftTypeRepository.findById(10L)).thenReturn(Optional.of(aircraftType));
+        when(aircraftRepository.saveAndFlush(existing)).thenReturn(existing);
+        when(aircraftMapper.toAircraftResponse(existing)).thenReturn(expected);
+
+        AircraftResponse actual = aircraftService.updateAircraftById(8L, request);
+
+        assertSame(expected, actual);
+        assertNull(existing.getOperatorAirline());
+        verify(airlineRepository, never()).findById(any());
+        verify(aircraftRepository).saveAndFlush(existing);
+    }
+
+    @Test
+    void shouldThrowNotFoundWhenUpdatingMissingAircraft() {
+        when(aircraftRepository.findById(9L)).thenReturn(Optional.empty());
+
+        assertStatus(HttpStatus.NOT_FOUND, () -> aircraftService.updateAircraftById(9L, validRequest()));
+
+        verify(aircraftRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void shouldThrowNotFoundWhenDeactivatingMissingAircraft() {
+        when(aircraftRepository.findById(10L)).thenReturn(Optional.empty());
+
+        assertStatus(HttpStatus.NOT_FOUND, () -> aircraftService.deactiveAircraftById(10L));
+
+        verify(aircraftRepository, never()).save(any());
+    }
+
     private AircraftRequest validRequest() {
         AircraftRequest request = new AircraftRequest();
         request.setAircraftRegistrationNumber("TC-JAA");

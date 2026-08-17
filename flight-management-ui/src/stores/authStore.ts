@@ -42,12 +42,24 @@ export const useAuthStore = defineStore('auth', () => {
   const isBiAnalyst = computed(() => hasRole('BI_ANALYST'))
   const isDevops = computed(() => hasRole('DEVOPS'))
 
+  const canViewDashboard = computed(() => isAdmin.value || isOperations.value)
+  const canViewFlights = computed(() => isAdmin.value || isOperations.value)
+  const canViewRadar = computed(() => isAdmin.value || isOperations.value)
+  const canViewArchive = computed(() => isAdmin.value || isOperations.value || isBiAnalyst.value)
+  const canReceiveFlightEvents = computed(() => canViewArchive.value)
   const canManageFlights = computed(() => isAdmin.value || isOperations.value)
   const canCancelFlight = computed(() => isAdmin.value)
   const canManageReferenceData = computed(() => isAdmin.value)
   const canViewReferenceData = computed(() => isAdmin.value || isOperations.value || isBiAnalyst.value)
   const canViewMonitoring = computed(() => isAdmin.value || isDevops.value)
   const canManageUsers = computed(() => isAdmin.value)
+  const defaultRoute = computed(() => {
+    if (canViewDashboard.value) return '/dashboard'
+    if (isDevops.value) return '/monitoring'
+    if (canViewReferenceData.value) return '/reference-data'
+    if (canViewArchive.value) return '/archive'
+    return '/login'
+  })
 
   const login = async (loginRequest: LoginRequest): Promise<void> => {
     const response = await flightApi.post<AuthResponse>('/api/auth/login', loginRequest)
@@ -66,11 +78,21 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('authUser', JSON.stringify(userInfo))
   }
 
-  const logout = (): void => {
+  const clearSession = (): void => {
     token.value = null
     user.value = null
     localStorage.removeItem('accessToken')
     localStorage.removeItem('authUser')
+  }
+
+  const logout = async (): Promise<void> => {
+    try {
+      if (token.value) {
+        await flightApi.post('/api/auth/logout')
+      }
+    } finally {
+      clearSession()
+    }
   }
 
   return {
@@ -82,14 +104,21 @@ export const useAuthStore = defineStore('auth', () => {
     isOperations,
     isBiAnalyst,
     isDevops,
+    canViewDashboard,
+    canViewFlights,
+    canViewRadar,
+    canViewArchive,
+    canReceiveFlightEvents,
     canManageFlights,
     canCancelFlight,
     canManageReferenceData,
     canViewReferenceData,
     canViewMonitoring,
     canManageUsers,
+    defaultRoute,
     hasRole,
     login,
+    clearSession,
     logout
   }
 })

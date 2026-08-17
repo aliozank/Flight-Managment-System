@@ -199,7 +199,7 @@ const openExternal = (url: string) => {
       </template>
 
       <div class="dashboards-grid">
-        <div class="dashboard-box" @click="openExternal('http://localhost:3000')">
+        <div class="dashboard-box" @click="openExternal('http://localhost:3000/d/flight-microservices-overview/flight-management-mikroservis-genel-bakis')">
           <div class="dash-icon">📈</div>
           <div class="dash-info">
             <h4>Grafana Visual Dashboard</h4>

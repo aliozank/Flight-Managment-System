@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class JwtService {
@@ -26,6 +27,7 @@ public class JwtService {
     public String generateToken(User user) {
 
         Instant now = Instant.now();
+        String tokenId = UUID.randomUUID().toString();
 
         List<String> roleNames = user.getUserRoles()
                 .stream()
@@ -39,6 +41,7 @@ public class JwtService {
                 .expiresAt(now.plusSeconds(expirationSeconds))
                 .claim("username", user.getUserName())
                 .claim("roles", roleNames)
+                .id(tokenId)
                 .build();
 
         return jwtEncoder

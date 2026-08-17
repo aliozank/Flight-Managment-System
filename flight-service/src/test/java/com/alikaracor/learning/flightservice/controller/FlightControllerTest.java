@@ -145,6 +145,17 @@ class FlightControllerTest {
     }
 
     @Test
+    @DisplayName("GET /api/flights/{id} - Uçuş bulunamadığında 404 Not Found dönmelidir")
+    void getFlightById_shouldReturn404_whenFlightNotFound() throws Exception {
+        when(flightService.getFlightById(99L))
+                .thenThrow(new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND));
+
+        mockMvc.perform(get("/api/flights/99")
+                        .with(jwt().jwt(j -> j.subject("100")).authorities(new SimpleGrantedAuthority("ROLE_OPERATIONS"))))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     @DisplayName("GET /api/flights/{id} - Yetkisiz istek 401 Unauthorized almalıdır")
     void getFlightById_shouldReturn401_whenUserIsUnauthenticated() throws Exception {
         mockMvc.perform(get("/api/flights/1"))
@@ -174,6 +185,29 @@ class FlightControllerTest {
                         .with(jwt().jwt(j -> j.subject("100")).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidCreateJson))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("POST /api/flights - Eksik zorunlu alan ile 400 Bad Request dönmelidir")
+    void createFlight_shouldReturn400_whenMissingRequiredField() throws Exception {
+        String missingFieldJson = """
+                {
+                  "airlineId": 10,
+                  "aircraftTypeId": 20,
+                  "originAirportId": 1,
+                  "destinationAirportId": 2,
+                  "flightTypeId": 5,
+                  "flightDate": "2026-10-01",
+                  "scheduledDepartureTime": "10:00:00",
+                  "scheduledArrivalTime": "12:00:00",
+                  "scheduledArrivalDate": "2026-10-01"
+                }
+                """;
+        mockMvc.perform(post("/api/flights")
+                        .with(jwt().jwt(j -> j.subject("100")).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(missingFieldJson))
                 .andExpect(status().isBadRequest());
     }
 

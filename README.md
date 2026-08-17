@@ -1,108 +1,199 @@
 # Flight Management System
 
-> A full-stack airline operations platform built with a microservice-based architecture.
+> Uçuş operasyonları, referans veriler, gerçek zamanlı durum güncellemeleri ve arşiv yönetimi için geliştirilmiş mikroservis tabanlı full-stack platform.
 
 ![Java](https://img.shields.io/badge/Java-17-ED8B00?logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-Microservices-6DB33F?logo=springboot&logoColor=white)
 ![Vue.js](https://img.shields.io/badge/Vue.js-3-4FC08D?logo=vuedotjs&logoColor=white)
 ![Kafka](https://img.shields.io/badge/Apache%20Kafka-Event%20Driven-231F20?logo=apachekafka&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
-![Status](https://img.shields.io/badge/status-active%20development-0ea5e9)
 
-## About the Project
-
-Flight Management System is an airline operations application developed to manage reference data, flight operations, users, historical records, and system monitoring.
-
-The project consists of three Spring Boot microservices and a Vue 3 operations interface. Each service owns its own database and communicates through REST APIs, Kafka events, Redis caching, and WebSocket messages.
-
-The project is still under active development.
-
-## Architecture
+## Mimari
 
 ```mermaid
 flowchart LR
-    UI["Vue 3 Operations UI"]
+    UI["Vue 3 UI / Nginx"]
     RM["Reference Manager"]
     FS["Flight Service"]
     AS["Flight Archive Service"]
     K[("Apache Kafka")]
     R[("Redis")]
 
-    UI --> RM
-    UI --> FS
-    UI --> AS
-    FS --> RM
-    FS --> R
-    RM --> K
-    FS --> K
+    UI -->|reverse proxy| RM
+    UI -->|reverse proxy| FS
+    UI -->|reverse proxy| AS
+    FS -->|REST doğrulama| RM
+    FS -->|cache + token blacklist| R
+    RM -->|token blacklist kontrolü| R
+    AS -->|token blacklist kontrolü| R
+    RM -->|reference.events| K
+    FS -->|flight.events| K
     K --> FS
     K --> AS
-    FS -->|"WebSocket"| UI
+    FS -->|WebSocket| UI
 ```
 
-## Services
+Her servis kendi veritabanının sahibidir. Referans sorguları REST, değişiklik bildirimleri Kafka, önbellek ve token iptal kayıtları Redis, canlı UI güncellemeleri ise STOMP/WebSocket üzerinden yürür. UI, Nginx üzerinden servis adlarına reverse proxy yapar; tarayıcı backend portlarını doğrudan bilmez.
 
-| Service | Responsibility |
+## Servisler
+
+| Bileşen | Sorumluluk | Port |
+| --- | --- | --- |
+| `reference-manager` | Havayolu, havalimanı, uçak, uçak tipi, rota ve uçuş tipi verileri | `8081` |
+| `flight-service` | Kimlik doğrulama, kullanıcılar, aktif uçuşlar, durum geçişleri, versiyonlar ve aktivite kayıtları | `8082` |
+| `flight_archive_service` | `ARRIVED` ve `CANCELLED` uçuşların idempotent arşivi | `8083` |
+| `flight-management-ui` | Operasyon, referans veri, radar, arşiv, kullanıcı ve izleme ekranları | `5173` |
+
+Altyapı portları: Prometheus `9090`, Grafana `3000`, reference MySQL `3307`, flight MySQL `3308`, archive PostgreSQL `5433`, Redis `6380`, Kafka `9094`.
+
+## Öne çıkan özellikler
+
+- RSA imzalı JWT kimlik doğrulama, rol bazlı yetkilendirme ve Redis tabanlı token revocation
+- Uçuş oluşturma, güncelleme, iptal ve CSV ile toplu içe aktarma
+- Saat dilimi bilgili kalkış/varış zamanları
+- `SCHEDULED`/`DELAYED` uçuşların otomatik `DEPARTED`, ardından `ARRIVED` durumuna geçirilmesi
+- Uçak–havayolu uygunluğu, rota ve uçak takvim çakışması doğrulamaları
+- Redis referans önbelleği ve Kafka ile cache invalidation
+- Uçuş versiyon geçmişi ve aktivite kayıtları
+- WebSocket ile canlı ve versiyon kontrollü UI güncellemeleri
+- Kafka üzerinden terminal durum arşivleme
+- Prometheus ve Grafana izleme altyapısı
+- Hatalı JSON ve DTO doğrulama istekleri için standart API hata gövdesi
+- Docker Compose ve Nginx ile tek komutla full-stack çalışma
+
+## Roller ve ekran erişimi
+
+| Rol | Erişebildiği alanlar |
 | --- | --- |
-| `reference-manager` | Manages airlines, airports, aircraft, aircraft types, routes, and flight types |
-| `flight-service` | Manages authentication, users, flight operations, validation, versioning, and activity logs |
-| `flight_archive_service` | Archives terminal flight records through Kafka events |
-| `flight-management-ui` | Provides the airline operations and administration interface |
+| `ADMIN` | Tüm ekranlar; kullanıcı, referans veri ve uçuş yönetimi |
+| `OPERATIONS` | Operasyon paneli, uçuşlar, referans veriler, arşiv ve canlı radar |
+| `BI_ANALYST` | Referans veriler ve uçuş arşivi |
+| `DEVOPS` | Sistem izleme ve Grafana |
 
-## Main Features
+Frontend route korumaları kullanıcı deneyimini düzenler; asıl yetki kontrolü backend servislerindeki Spring Security kurallarıyla uygulanır.
 
-- Airline, airport, aircraft, route, and flight type management
-- Flight creation, update, cancellation, and listing
-- CSV-based bulk flight import
-- Realistic mock flight generation
-- Reference data validation with Redis caching
-- Kafka-based event communication and cache invalidation
-- JWT authentication and role-based authorization
-- Flight version history and activity logging
-- Real-time flight updates with WebSocket
-- Event-driven flight archive
-- Prometheus and Grafana monitoring
-- Docker Compose infrastructure
-- Automated backend tests
+## JWT logout ve token revocation
 
-## Technology Stack
+`flight-service` tarafından üretilen her access token benzersiz bir `jti` taşır. `POST /api/auth/logout` çağrısında bu kimlik, token'ın kalan ömrü kadar TTL ile Redis'e kaydedilir. Üç mikroservisin JWT validator'ı aynı blacklist kaydını kontrol ettiği için logout edilen token tüm servislerde anında `401 Unauthorized` ile reddedilir. Süresi dolan kayıt Redis tarafından otomatik kaldırılır.
 
-**Backend:** Java 17, Spring Boot, Spring Security, Spring Data JPA, MapStruct, Liquibase
+## Gereksinimler
 
-**Communication:** REST API, Apache Kafka, Redis, STOMP/WebSocket
+- Docker ve Docker Compose
+- Yerel UI geliştirmesi için Node.js `^22.18.0` veya `>=24.12.0` ve npm
+- Demo veri scripti için `curl` ve `jq`
+- Anahtar üretmek için OpenSSL
 
-**Databases:** MySQL, PostgreSQL
+## İlk kurulum
 
-**Frontend:** Vue 3, TypeScript, Vite, Pinia, Axios, Element Plus, Leaflet
+Repository kökünde `.env` oluşturun:
 
-**Infrastructure:** Docker, Docker Compose, Prometheus, Grafana
+```dotenv
+MYSQL_ROOT_PASSWORD=your_mysql_password
+POSTGRES_PASSWORD=your_postgres_password
+ADMIN_USERNAME=admin
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=Admin123
+```
 
-**Testing:** JUnit 5, Mockito, Spring Boot Test, Testcontainers
+JWT imzalama anahtarını üretin ve aynı public key'i üç backend servisine yerleştirin:
 
-## Project Status
+```bash
+mkdir -p local-keys
+openssl genpkey -algorithm RSA -out local-keys/private-key.pem -pkeyopt rsa_keygen_bits:2048
+openssl rsa -pubout -in local-keys/private-key.pem -out /tmp/flight-management-public-key.pem
+cp /tmp/flight-management-public-key.pem flight-service/src/main/resources/keys/public-key.pem
+cp /tmp/flight-management-public-key.pem reference-manager/src/main/resources/keys/public-key.pem
+cp /tmp/flight-management-public-key.pem flight_archive_service/src/main/resources/keys/public-key.pem
+```
 
-### Completed
+Backend servislerini, altyapıyı ve Nginx üzerinde çalışan UI'ı başlatın:
 
-- [x] Core microservice architecture
-- [x] Reference data management
-- [x] Flight lifecycle operations
-- [x] Authentication and authorization
-- [x] Kafka, Redis, and WebSocket integrations
-- [x] Flight archive service
-- [x] Monitoring infrastructure
-- [x] Vue operations interface
-- [x] Automated backend tests
+```bash
+docker compose config
+docker compose up -d --build
+docker compose ps
+```
 
-### Planned
+İlk açılışta `.env` içindeki bilgilerle bir `ADMIN` hesabı oluşturulur.
 
-- [ ] Complete timezone-aware flight scheduling
-- [ ] Strengthen aircraft schedule conflict validation
-- [ ] Add flight status transition rules
-- [ ] Add pagination and advanced filtering
-- [ ] Expand frontend and end-to-end tests
-- [ ] Add CI/CD workflows
-- [ ] Prepare production deployment configuration
+Başlıca adresler:
 
-## Author
+| Bileşen | Adres |
+| --- | --- |
+| UI | `http://localhost:5173` |
+| Grafana | `http://localhost:3000` |
+| Prometheus | `http://localhost:9090` |
+
+Grafana'nın Compose ortamındaki demo giriş bilgileri `admin` / `admin` şeklindedir; gerçek dağıtım öncesinde değiştirilmelidir.
+
+## Demo referans verileri
+
+Servisler sağlıklı duruma geldikten sonra idempotent seed scriptini çalıştırın:
+
+```bash
+./scripts/seed-demo-data.sh
+```
+
+Script `.env` dosyasındaki admin bilgileriyle giriş yapar; havayolu, havalimanı, uçak tipi, uçak, rota ve uçuş tipi kayıtlarını doğal anahtarlarıyla kontrol eder ve yalnızca eksik olanları ekler. Bu nedenle aynı veri setini çoğaltmadan tekrar çalıştırılabilir.
+
+Farklı adresler kullanılıyorsa:
+
+```bash
+FLIGHT_API_URL=http://localhost:8082 REFERENCE_API_URL=http://localhost:8081 ./scripts/seed-demo-data.sh
+```
+
+## UI geliştirme modu
+
+Normal kullanımda UI, `docker compose up -d --build` komutuyla Nginx container'ında başlar. Hot reload ile yerel geliştirme yapmak için Docker UI servisini durdurup Vite kullanılabilir:
+
+```bash
+docker compose stop flight-management-ui
+cd flight-management-ui
+npm ci
+npm run dev
+```
+
+Vite geliştirme proxy'si ve Nginx aynı `/flight-api`, `/reference-api` ve `/archive-api` yollarını kullandığı için frontend kodunda ortam bazlı backend adresi değişikliği gerekmez.
+
+## Build ve test
+
+Her backend servisi kendi dizininde test edilir:
+
+```bash
+(cd reference-manager && ./mvnw test)
+(cd flight-service && ./mvnw test)
+(cd flight_archive_service && ./mvnw test)
+```
+
+UI doğrulaması:
+
+```bash
+cd flight-management-ui
+npm run build
+```
+
+Son doğrulanan test durumu:
+
+| Mikroservis | Çalıştırılan | Başarısız | Atlanan | Sonuç |
+| --- | ---: | ---: | ---: | --- |
+| `reference-manager` | 114 | 0 | 0 | `BUILD SUCCESS` |
+| `flight-service` | 152 | 0 | 1 | `BUILD SUCCESS` |
+| `flight_archive_service` | 47 | 0 | 0 | `BUILD SUCCESS` |
+
+JWT revocation ayrıca canlı Docker ortamında doğrudan servis portları ve UI Nginx proxy yolları üzerinden doğrulanmıştır: logout öncesinde `200`, logout edilen eski token ile üç serviste `401`, yeni token ile tekrar `200` alınmıştır.
+
+## İzleme
+
+Prometheus üç mikroservisin Actuator metriklerini toplar. Grafana datasource ve `Flight Management Mikroservis Genel Bakış` dashboard'u Compose başladığında otomatik provision edilir. Dashboard; servis erişilebilirliği, istek oranı, HTTP gecikmesi, durum kodları, JVM heap, CPU, thread, bellek ve HikariCP metriklerini gösterir.
+
+## Mevcut teknik borçlar
+
+- Server-side pagination ve gelişmiş filtreleme
+- Kafka yayınlarında tam DB–event atomikliği için transactional outbox
+- OpenAPI/Swagger API dokümantasyonu
+- UI component ve uçtan uca test kapsamı
+- CI/CD ve production deployment yapılandırması
+
+## Yazar
 
 Ali Ozan Karaçor

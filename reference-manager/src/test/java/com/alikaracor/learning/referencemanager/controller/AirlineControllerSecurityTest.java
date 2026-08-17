@@ -120,6 +120,48 @@ class AirlineControllerSecurityTest {
     }
 
     @Test
+    void shouldRejectInvalidIataCode() throws Exception {
+        String invalidJson = """
+                {
+                  "airlineName": "Test",
+                  "airlineIcaoCode": "TST",
+                  "airlineIataCode": "TOO_LONG",
+                  "airlineCountry": "Country",
+                  "airlineStatus": "ACTIVE"
+                }
+                """;
+
+        mockMvc.perform(
+                        post("/api/airlines")
+                                .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(invalidJson)
+                )
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldRejectInvalidIcaoCode() throws Exception {
+        String invalidJson = """
+                {
+                  "airlineName": "Test",
+                  "airlineIcaoCode": "TS",
+                  "airlineIataCode": "TT",
+                  "airlineCountry": "Country",
+                  "airlineStatus": "ACTIVE"
+                }
+                """;
+
+        mockMvc.perform(
+                        post("/api/airlines")
+                                .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(invalidJson)
+                )
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void shouldAllowAdminToDeactivateAirline() throws Exception {
         mockMvc.perform(
                         delete("/api/airlines/1")

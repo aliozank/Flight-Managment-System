@@ -80,6 +80,7 @@ export interface RouteReference {
     routeId: number
     originAirportId: number
     destinationAirportId: number
+    routeStatus?: string
     distanceKm?: number
     estimatedDurationMinutes?: number
 }
@@ -90,5 +91,4 @@ export interface RouteRequest {
     distanceKm?: number
     estimatedDurationMinutes?: number
 }
-
 

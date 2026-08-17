@@ -14,11 +14,16 @@ const referenceStore = useReferenceStore()
 const wsStore = useWebSocketStore()
 
 const drawerVisible = ref(false)
+const loggingOut = ref(false)
 
 onMounted(async () => {
   if (authStore.isAuthenticated) {
-    referenceStore.fetchAllReferences()
-    wsStore.connect()
+    if (authStore.canViewReferenceData || authStore.canViewArchive) {
+      referenceStore.fetchAllReferences()
+    }
+    if (authStore.canReceiveFlightEvents) {
+      wsStore.connect()
+    }
   }
 })
 
@@ -32,10 +37,19 @@ const handleOpenNotifications = () => {
 }
 
 const handleLogout = async () => {
+  if (loggingOut.value) return
+
+  loggingOut.value = true
   wsStore.disconnect()
-  authStore.logout()
-  ElMessage.success('Çıkış yapıldı')
-  await router.push('/login')
+  try {
+    await authStore.logout()
+    ElMessage.success('Çıkış yapıldı')
+  } catch {
+    // API interceptor reports the request error; the local session is still cleared.
+  } finally {
+    loggingOut.value = false
+    await router.push('/login')
+  }
 }
 </script>
 
@@ -54,17 +68,32 @@ const handleLogout = async () => {
       </div>
 
       <nav class="sidebar-nav">
-        <router-link to="/dashboard" class="nav-item" :class="{ active: route.path === '/dashboard' }">
+        <router-link
+          v-if="authStore.canViewDashboard"
+          to="/dashboard"
+          class="nav-item"
+          :class="{ active: route.path === '/dashboard' }"
+        >
           <span class="nav-icon">📊</span>
           <span class="nav-text">Dashboard</span>
         </router-link>
 
-        <router-link to="/flights" class="nav-item" :class="{ active: route.path.startsWith('/flights') }">
+        <router-link
+          v-if="authStore.canViewFlights"
+          to="/flights"
+          class="nav-item"
+          :class="{ active: route.path.startsWith('/flights') }"
+        >
           <span class="nav-icon">🛫</span>
           <span class="nav-text">Uçuş Yönetimi</span>
         </router-link>
 
-        <router-link to="/radar" class="nav-item" :class="{ active: route.path.startsWith('/radar') }">
+        <router-link
+          v-if="authStore.canViewRadar"
+          to="/radar"
+          class="nav-item"
+          :class="{ active: route.path.startsWith('/radar') }"
+        >
           <span class="nav-icon">🛰️</span>
           <span class="nav-text">Canlı Radarı</span>
         </router-link>
@@ -89,7 +118,12 @@ const handleLogout = async () => {
           <span class="nav-text">Kullanıcılar</span>
         </router-link>
 
-        <router-link to="/archive" class="nav-item" :class="{ active: route.path.startsWith('/archive') }">
+        <router-link
+          v-if="authStore.canViewArchive"
+          to="/archive"
+          class="nav-item"
+          :class="{ active: route.path.startsWith('/archive') }"
+        >
           <span class="nav-icon">🗄️</span>
           <span class="nav-text">Uçuş Arşivi</span>
         </router-link>
@@ -106,7 +140,7 @@ const handleLogout = async () => {
       </nav>
 
       <div class="sidebar-footer">
-        <WebSocketBadge />
+        <WebSocketBadge v-if="authStore.canReceiveFlightEvents" />
       </div>
     </aside>
 
@@ -119,7 +153,7 @@ const handleLogout = async () => {
 
         <div class="header-right">
           <!-- STOMP Live Notification Bell -->
-          <div class="notification-bell" @click="handleOpenNotifications">
+          <div v-if="authStore.canReceiveFlightEvents" class="notification-bell" @click="handleOpenNotifications">
             <span class="bell-icon">🔔</span>
             <el-badge
               v-if="wsStore.unreadCount > 0"
@@ -148,7 +182,7 @@ const handleLogout = async () => {
             </div>
           </div>
 
-          <el-button type="danger" plain size="default" @click="handleLogout">
+          <el-button type="danger" plain size="default" :loading="loggingOut" @click="handleLogout">
             Çıkış Yap
           </el-button>
         </div>

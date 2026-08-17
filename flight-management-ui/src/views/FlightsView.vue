@@ -93,6 +93,25 @@ const canEditFlight = (status: FlightStatus) => status === 'SCHEDULED' || status
 
 const canCancelFlight = (status: FlightStatus) => status === 'SCHEDULED' || status === 'DELAYED'
 
+const turkeyTimeFormatter = new Intl.DateTimeFormat('tr-TR', {
+  timeZone: 'Europe/Istanbul',
+  hour: '2-digit',
+  minute: '2-digit'
+})
+
+const formatTurkeyTime = (value?: string): string => {
+  if (!value) return '-'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '-' : turkeyTimeFormatter.format(date)
+}
+
+const isForeignAirport = (airportId: number): boolean => {
+  const timeZone = referenceStore.airports.find(
+    (airport) => airport.airportId === airportId
+  )?.airportTimezone
+  return Boolean(timeZone && timeZone !== 'Europe/Istanbul')
+}
+
 const handleStatusCommand = async (flight: FlightResponse, command: string | number | object) => {
   const targetStatus = command as FlightStatus
 
@@ -279,14 +298,28 @@ const handleCancelFlight = (flight: FlightResponse) => {
           </template>
         </el-table-column>
 
-        <el-table-column label="Güzergah & Saat (STD ➔ STA)" min-width="240">
+        <el-table-column label="Güzergah & Saat" min-width="285">
           <template #default="{ row }">
             <div class="route-time-cell">
               <span class="route-codes">
                 {{ referenceStore.getAirportCode(row.originAirportId) }} ➔ {{ referenceStore.getAirportCode(row.destinationAirportId) }}
               </span>
               <span class="time-range">
-                {{ row.scheduledDepartureTime?.substring(0, 5) }} - {{ row.scheduledArrivalTime?.substring(0, 5) }}
+                <span>
+                  {{ referenceStore.getAirportCode(row.originAirportId) }}
+                  {{ row.scheduledDepartureTime?.substring(0, 5) }}
+                  <small v-if="isForeignAirport(row.originAirportId)">
+                    (TR {{ formatTurkeyTime(row.scheduledDepartureAt) }})
+                  </small>
+                </span>
+                <span>➔</span>
+                <span>
+                  {{ referenceStore.getAirportCode(row.destinationAirportId) }}
+                  {{ row.scheduledArrivalTime?.substring(0, 5) }}
+                  <small v-if="isForeignAirport(row.destinationAirportId)">
+                    (TR {{ formatTurkeyTime(row.scheduledArrivalAt) }})
+                  </small>
+                </span>
               </span>
               <span v-if="row.scheduledArrivalDate !== row.flightDate" class="date-range">
                 {{ row.flightDate }} ➔ {{ row.scheduledArrivalDate }}
@@ -483,9 +516,19 @@ const handleCancelFlight = (flight: FlightResponse) => {
 }
 
 .time-range {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
   font-size: 11px;
   color: #64748b;
   font-weight: 600;
+}
+
+.time-range small {
+  color: #047857;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .date-range {

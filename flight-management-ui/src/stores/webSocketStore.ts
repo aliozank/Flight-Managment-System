@@ -91,12 +91,9 @@ export const useWebSocketStore = defineStore('webSocket', () => {
 
     status.value = 'CONNECTING'
 
-    // Try proxied URL first, fallback to direct port 8082
+    // Use the same-origin proxy in both Vite development and the Nginx container.
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsUrl = `${protocol}//${window.location.host}/flight-api/ws`
-    const fallbackWsUrl = `ws://localhost:8082/ws`
-
-    let attemptedFallback = false
 
     const trySocket = (url: string) => {
       try {
@@ -180,13 +177,8 @@ export const useWebSocketStore = defineStore('webSocket', () => {
 
           ws = null
 
-          if (!wasConnected && !attemptedFallback) {
-            attemptedFallback = true
-            trySocket(fallbackWsUrl)
-          } else {
-            status.value = 'DISCONNECTED'
-            scheduleReconnect()
-          }
+          status.value = 'DISCONNECTED'
+          scheduleReconnect()
         }
       } catch {
         status.value = 'ERROR'

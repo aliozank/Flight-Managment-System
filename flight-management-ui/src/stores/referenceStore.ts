@@ -19,36 +19,58 @@ export const useReferenceStore = defineStore('reference', () => {
   const routes = ref<RouteReference[]>([])
   const loading = ref(false)
   const initialized = ref(false)
+  let fetchPromise: Promise<void> | null = null
 
   const fetchAllReferences = async (force = false) => {
     if (initialized.value && !force) return
-    loading.value = true
-    try {
-      const [
-        airlinesRes,
-        airportsRes,
-        aircraftsRes,
-        aircraftTypesRes,
-        flightTypesRes,
-        routesRes
-      ] = await Promise.all([
-        referenceApi.get<AirlineReference[]>('/api/airlines').catch(() => ({ data: [] })),
-        referenceApi.get<AirportReference[]>('/api/airports').catch(() => ({ data: [] })),
-        referenceApi.get<AircraftReference[]>('/api/aircrafts').catch(() => ({ data: [] })),
-        referenceApi.get<AircraftTypeReference[]>('/api/aircraft-types').catch(() => ({ data: [] })),
-        referenceApi.get<FlightTypeReference[]>('/api/flight-types').catch(() => ({ data: [] })),
-        referenceApi.get<RouteReference[]>('/api/routes').catch(() => ({ data: [] }))
-      ])
+    if (fetchPromise) return fetchPromise
 
-      airlines.value = airlinesRes.data || []
-      airports.value = airportsRes.data || []
-      aircrafts.value = aircraftsRes.data || []
-      aircraftTypes.value = aircraftTypesRes.data || []
-      flightTypes.value = flightTypesRes.data || []
-      routes.value = routesRes.data || []
-      initialized.value = true
+    const request = (async () => {
+      loading.value = true
+      try {
+        const [
+          airlinesResult,
+          airportsResult,
+          aircraftsResult,
+          aircraftTypesResult,
+          flightTypesResult,
+          routesResult
+        ] = await Promise.allSettled([
+          referenceApi.get<AirlineReference[]>('/api/airlines'),
+          referenceApi.get<AirportReference[]>('/api/airports'),
+          referenceApi.get<AircraftReference[]>('/api/aircrafts'),
+          referenceApi.get<AircraftTypeReference[]>('/api/aircraft-types'),
+          referenceApi.get<FlightTypeReference[]>('/api/flight-types'),
+          referenceApi.get<RouteReference[]>('/api/routes')
+        ])
+
+        airlines.value = airlinesResult.status === 'fulfilled' ? airlinesResult.value.data || [] : []
+        airports.value = airportsResult.status === 'fulfilled' ? airportsResult.value.data || [] : []
+        aircrafts.value = aircraftsResult.status === 'fulfilled' ? aircraftsResult.value.data || [] : []
+        aircraftTypes.value = aircraftTypesResult.status === 'fulfilled' ? aircraftTypesResult.value.data || [] : []
+        flightTypes.value = flightTypesResult.status === 'fulfilled' ? flightTypesResult.value.data || [] : []
+        routes.value = routesResult.status === 'fulfilled' ? routesResult.value.data || [] : []
+
+        initialized.value = [
+          airlinesResult,
+          airportsResult,
+          aircraftsResult,
+          aircraftTypesResult,
+          flightTypesResult,
+          routesResult
+        ].every((result) => result.status === 'fulfilled')
+      } finally {
+        loading.value = false
+      }
+    })()
+
+    fetchPromise = request
+    try {
+      await request
     } finally {
-      loading.value = false
+      if (fetchPromise === request) {
+        fetchPromise = null
+      }
     }
   }
 

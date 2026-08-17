@@ -22,14 +22,16 @@ public class AuthService {
     private final JwtService jwtService;
     private final UserMapper userMapper;
     private final ActivityLogService activityLogService;
+    private final TokenRevocationService tokenRevocationService;
 
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService, UserMapper userMapper, ActivityLogService activityLogService) {
+    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService, UserMapper userMapper, ActivityLogService activityLogService, TokenRevocationService tokenRevocationService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.userMapper = userMapper;
         this.activityLogService = activityLogService;
+        this.tokenRevocationService = tokenRevocationService;
     }
 
     @Transactional
@@ -74,7 +76,7 @@ public class AuthService {
 
         }
 
-        String accessToken = jwtService.generateToken(loginUser);   //HER SEFERİNDE YENİ TOKEN ÜRETİYOR ÖNEMSİZ AMA REDİSTE EZECEĞİZ
+        String accessToken = jwtService.generateToken(loginUser);
 
         loginUser.setUserLastLoginAt(Instant.now());
 
@@ -88,6 +90,11 @@ public class AuthService {
 
 
     }
+
+    public void logout(String tokenId, Instant expiresAt) {
+        tokenRevocationService.revokeToken(tokenId, expiresAt);
+    }
+
 
 
 }

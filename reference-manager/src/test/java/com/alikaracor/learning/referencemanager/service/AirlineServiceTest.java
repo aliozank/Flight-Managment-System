@@ -114,6 +114,7 @@ class AirlineServiceTest {
         verify(publisher, never()).publish(any(ReferenceEvent.class));
     }
 
+
     @Test
     void shouldReturnAirlineById() {
         Airline airline = airline(5L, AirlineStatus.ACTIVE);

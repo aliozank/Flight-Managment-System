@@ -118,4 +118,28 @@ class FlightRepositoryTest {
 
         assertThat(exists).isFalse();
     }
+
+    @Test
+    @DisplayName("findAllByFlightStatusInAndScheduledDepartureAtLessThanEqual - Sadece belirtilen statülerdeki (SCHEDULED, DELAYED) uçuşları bulmalı, DEPARTED'ı bulmamalıdır")
+    void findAllByFlightStatusIn_shouldFindScheduledAndDelayed_notDeparted() {
+        Instant past = Instant.parse("2026-10-01T10:00:00Z");
+        Instant now = Instant.parse("2026-10-01T12:00:00Z");
+
+        Flight scheduled = createSampleFlight("TK2001", 101L, past, now.plusSeconds(3600), FlightStatus.SCHEDULED);
+        Flight delayed = createSampleFlight("TK2002", 102L, past, now.plusSeconds(3600), FlightStatus.DELAYED);
+        Flight departed = createSampleFlight("TK2003", 103L, past, now.plusSeconds(3600), FlightStatus.DEPARTED);
+
+        flightRepository.save(scheduled);
+        flightRepository.save(delayed);
+        flightRepository.save(departed);
+
+        java.util.List<Flight> results = flightRepository.findAllByFlightStatusInAndScheduledDepartureAtLessThanEqual(
+                java.util.List.of(FlightStatus.SCHEDULED, FlightStatus.DELAYED), now
+        );
+
+        assertThat(results).hasSize(2);
+        assertThat(results).extracting(Flight::getFlightStatus)
+                .containsExactlyInAnyOrder(FlightStatus.SCHEDULED, FlightStatus.DELAYED)
+                .doesNotContain(FlightStatus.DEPARTED);
+    }
 }

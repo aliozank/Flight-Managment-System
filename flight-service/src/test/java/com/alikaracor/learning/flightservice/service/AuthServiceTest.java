@@ -43,6 +43,9 @@ class AuthServiceTest {
     @Mock
     private ActivityLogService activityLogService;
 
+    @Mock
+    private TokenRevocationService tokenRevocationService;
+
     @InjectMocks
     private AuthService authService;
 
@@ -122,5 +125,16 @@ class AuthServiceTest {
                 .hasMessage("Invalid username or password");
 
         verify(activityLogService).logLoginFailure(1L, "invalid user password", ipAddress);
+    }
+
+    @Test
+    @DisplayName("logout - TokenId ve expiresAt bilgisini TokenRevocationService'e aktarmalıdır")
+    void logout_shouldDelegateToTokenRevocationService() {
+        String tokenId = "jti-uuid-123";
+        java.time.Instant expiresAt = java.time.Instant.now().plusSeconds(3600);
+
+        authService.logout(tokenId, expiresAt);
+
+        verify(tokenRevocationService).revokeToken(tokenId, expiresAt);
     }
 }

@@ -21,108 +21,67 @@ const selectedFlight = ref<FlightResponse | null>(null)
 const nowTimeMs = ref(Date.now())
 let clockTimer: ReturnType<typeof setInterval> | null = null
 
-// Real GPS Coordinates + Real Runway Threshold Endpoints (Lat, Lng) for Exact OSM Overlay
-const airportData: Record<string, {
+interface AirportMapPoint {
   lat: number
   lng: number
   code: string
   name: string
-  rwyStart: [number, number]
-  rwyEnd: [number, number]
-}> = {
-  IST: {
-    lat: 41.2753,
-    lng: 28.7519,
-    code: 'IST',
-    name: 'İstanbul Havalimanı',
-    rwyStart: [41.2600, 28.7450],
-    rwyEnd: [41.2900, 28.7550]
-  },
-  SAW: {
-    lat: 40.8986,
-    lng: 29.3092,
-    code: 'SAW',
-    name: 'Sabiha Gökçen',
-    rwyStart: [40.8940, 29.2980],
-    rwyEnd: [40.9030, 29.3200]
-  },
-  ESB: {
-    lat: 40.1281,
-    lng: 32.9951,
-    code: 'ESB',
-    name: 'Ankara Esenboğa',
-    rwyStart: [40.1170, 32.9880],
-    rwyEnd: [40.1390, 33.0020]
-  },
-  ADB: {
-    lat: 38.2924,
-    lng: 27.1570,
-    code: 'ADB',
-    name: 'İzmir Adnan Menderes',
-    rwyStart: [38.2840, 27.1530],
-    rwyEnd: [38.3000, 27.1610]
-  },
-  AYT: {
-    lat: 36.8987,
-    lng: 30.8005,
-    code: 'AYT',
-    name: 'Antalya Havalimanı',
-    rwyStart: [36.8880, 30.8000],
-    rwyEnd: [36.9080, 30.8010]
-  },
-  LHR: {
-    lat: 51.4700,
-    lng: -0.4543,
-    code: 'LHR',
-    name: 'London Heathrow',
-    rwyStart: [51.4770, -0.4750],
-    rwyEnd: [51.4770, -0.4350]
-  },
-  CDG: {
-    lat: 49.0097,
-    lng: 2.5479,
-    code: 'CDG',
-    name: 'Paris Charles de Gaulle',
-    rwyStart: [49.0060, 2.5300],
-    rwyEnd: [49.0060, 2.5650]
-  },
-  AMS: {
-    lat: 52.3105,
-    lng: 4.7683,
-    code: 'AMS',
-    name: 'Amsterdam Schiphol',
-    rwyStart: [52.3000, 4.7600],
-    rwyEnd: [52.3200, 4.7650]
-  },
-  FRA: {
-    lat: 50.0379,
-    lng: 8.5622,
-    code: 'FRA',
-    name: 'Frankfurt Airport',
-    rwyStart: [50.0340, 8.5450],
-    rwyEnd: [50.0360, 8.5800]
+}
+
+// Reference API currently has no latitude/longitude fields. Until those fields are
+// owned by reference-manager, the radar can only place airports in this catalog.
+const airportCoordinates: Record<string, { lat: number; lng: number }> = {
+  IST: { lat: 41.2753, lng: 28.7519 },
+  SAW: { lat: 40.8986, lng: 29.3092 },
+  ESB: { lat: 40.1281, lng: 32.9951 },
+  ADB: { lat: 38.2924, lng: 27.1570 },
+  AYT: { lat: 36.8987, lng: 30.8005 },
+  LHR: { lat: 51.4700, lng: -0.4543 },
+  CDG: { lat: 49.0097, lng: 2.5479 },
+  AMS: { lat: 52.3105, lng: 4.7683 },
+  FRA: { lat: 50.0379, lng: 8.5622 }
+}
+
+const getAirportGps = (airportId: number): AirportMapPoint | null => {
+  const airport = referenceStore.airports.find((a) => a.airportId === airportId)
+  const code = airport?.airportIataCode?.trim().toUpperCase()
+  const coordinates = code ? airportCoordinates[code] : undefined
+
+  if (!airport || !code || !coordinates) return null
+
+  return {
+    ...coordinates,
+    code,
+    name: airport.airportName
   }
 }
 
-const getAirportGps = (airportId: number) => {
-  const airport = referenceStore.airports.find((a) => a.airportId === airportId)
-  if (airport && airport.airportIataCode && airportData[airport.airportIataCode]) {
-    return airportData[airport.airportIataCode]!
-  }
-  return {
-    lat: 41.0,
-    lng: 29.0,
-    code: 'APT',
-    name: 'Havalimanı',
-    rwyStart: [41.0, 29.0] as [number, number],
-    rwyEnd: [41.01, 29.01] as [number, number]
-  }
+const registeredAirportsOnMap = computed(() => {
+  return referenceStore.airports
+    .map((airport) => getAirportGps(airport.airportId))
+    .filter((airport): airport is AirportMapPoint => airport !== null)
+})
+
+const airportsWithoutCoordinates = computed(() => {
+  return referenceStore.airports.filter((airport) => {
+    const code = airport.airportIataCode?.trim().toUpperCase()
+    return !code || !airportCoordinates[code]
+  })
+})
+
+const hasFlightCoordinates = (flight: FlightResponse): boolean => {
+  return getAirportGps(flight.originAirportId) !== null
+    && getAirportGps(flight.destinationAirportId) !== null
 }
 
 // PURE 1X REAL-TIME TELEMETRY ENGINE
 const calculateFlightTelemetry = (flight: FlightResponse) => {
   const origin = getAirportGps(flight.originAirportId)
   const dest = getAirportGps(flight.destinationAirportId)
+
+  if (!origin || !dest) {
+    throw new Error(`Radar coordinates are missing for flight ${flight.flightNumber}`)
+  }
 
   const parsedDepartureMs = Date.parse(flight.scheduledDepartureAt)
   const parsedArrivalMs = Date.parse(flight.scheduledArrivalAt)
@@ -138,17 +97,18 @@ const calculateFlightTelemetry = (flight: FlightResponse) => {
     : Math.max(0, Math.min(1, elapsed / totalDuration))
   const isAirborne = flight.flightStatus === 'DEPARTED'
 
-  // Exact Real GPS Position along line vector directly to Airport Runway Threshold
-  const currentLat = origin.rwyEnd[0] + (dest.rwyStart[0] - origin.rwyEnd[0]) * progressFraction
-  const currentLng = origin.rwyEnd[1] + (dest.rwyStart[1] - origin.rwyEnd[1]) * progressFraction
+  const currentLat = origin.lat + (dest.lat - origin.lat) * progressFraction
+  const currentLng = origin.lng + (dest.lng - origin.lng) * progressFraction
 
-  const dLng = dest.rwyStart[1] - origin.rwyEnd[1]
-  const dLat = dest.rwyStart[0] - origin.rwyEnd[0]
+  const dLng = dest.lng - origin.lng
+  const dLat = dest.lat - origin.lat
   const angleDeg = (Math.atan2(dLng, dLat) * 180) / Math.PI
 
-  const isCruising = progressFraction > 0.1 && progressFraction < 0.9
-  const altitude = isAirborne ? (isCruising ? 34000 : Math.round(progressFraction * 34000)) : 0
-  const speed = isAirborne ? (isCruising ? 460 : Math.round(progressFraction * 460)) : 0
+  const climbRatio = Math.min(progressFraction / 0.15, 1)
+  const descentRatio = Math.min((1 - progressFraction) / 0.15, 1)
+  const phaseRatio = Math.max(0, Math.min(climbRatio, descentRatio))
+  const altitude = isAirborne ? Math.round(phaseRatio * 34000) : 0
+  const speed = isAirborne ? Math.round(phaseRatio * 460) : 0
 
   const depTimeFormatted = `${flight.flightDate} ${flight.scheduledDepartureTime.substring(0, 5)}`
   const arrTimeFormatted = `${flight.scheduledArrivalDate} ${flight.scheduledArrivalTime.substring(0, 5)}`
@@ -170,7 +130,15 @@ const calculateFlightTelemetry = (flight: FlightResponse) => {
 
 // Pure 1x Real-Time Airborne Flights
 const activeFlightsOnMap = computed(() => {
-  return flightStore.flights.filter((flight) => flight.flightStatus === 'DEPARTED')
+  return flightStore.flights.filter((flight) => {
+    return flight.flightStatus === 'DEPARTED' && hasFlightCoordinates(flight)
+  })
+})
+
+const airborneFlightsWithoutCoordinates = computed(() => {
+  return flightStore.flights.filter((flight) => {
+    return flight.flightStatus === 'DEPARTED' && !hasFlightCoordinates(flight)
+  })
 })
 
 const initMap = () => {
@@ -191,8 +159,8 @@ const initMap = () => {
     maxZoom: 19
   }).addTo(map)
 
-  // CLEAN PLAIN TEXT AIRPORT LABELS & REAL OVERLAY RUNWAY STRIPS
-  for (const item of Object.values(airportData)) {
+  // Only airports returned by the reference API are displayed on the map.
+  for (const item of registeredAirportsOnMap.value) {
     const cleanLabelIcon = L.divIcon({
       className: 'plain-airport-label-icon',
       html: `<div class="plain-label-box"><span class="dot"></span><span class="text">${item.code} - ${item.name}</span></div>`,
@@ -200,13 +168,16 @@ const initMap = () => {
       iconAnchor: [80, 10]
     })
     L.marker([item.lat, item.lng], { icon: cleanLabelIcon }).addTo(map)
+  }
 
-    // Real Runway Overlay Polyline on OpenStreetMap Asphalt
-    L.polyline([item.rwyStart, item.rwyEnd], {
-      color: '#10b981',
-      weight: 6,
-      opacity: 0.9
-    }).addTo(map).bindTooltip(`Pist / Runway ${item.code}`)
+  if (registeredAirportsOnMap.value.length > 1) {
+    const bounds = L.latLngBounds(
+      registeredAirportsOnMap.value.map((airport) => [airport.lat, airport.lng] as [number, number])
+    )
+    map.fitBounds(bounds, { padding: [40, 40] })
+  } else if (registeredAirportsOnMap.value.length === 1) {
+    const airport = registeredAirportsOnMap.value[0]!
+    map.setView([airport.lat, airport.lng], 8)
   }
 
   updateMapElements()
@@ -236,9 +207,9 @@ const updateMapElements = () => {
     const pos = calculateFlightTelemetry(selectedFlight.value)
     currentPolyline = L.polyline(
       [
-        [pos.originGps.rwyEnd[0], pos.originGps.rwyEnd[1]],
+        [pos.originGps.lat, pos.originGps.lng],
         [pos.lat, pos.lng],
-        [pos.destGps.rwyStart[0], pos.destGps.rwyStart[1]]
+        [pos.destGps.lat, pos.destGps.lng]
       ],
       {
         color: '#10b981',
@@ -297,6 +268,13 @@ watch(selectedFlight, () => {
   updateMapElements()
 })
 
+watch(activeFlightsOnMap, (flights) => {
+  const selectedId = selectedFlight.value?.flightId
+  selectedFlight.value = flights.find((flight) => flight.flightId === selectedId)
+    ?? flights[0]
+    ?? null
+})
+
 onMounted(async () => {
   await Promise.all([
     referenceStore.fetchAllReferences(),
@@ -336,10 +314,10 @@ const selectFlight = (flight: FlightResponse) => {
       <div class="header-info">
         <div class="live-pill">
           <span class="pulse-dot" />
-          <span>REALTIME GERÇEK SAAT • {{ new Date(nowTimeMs).toLocaleTimeString('tr-TR') }}</span>
+          <span>CANLI SAAT • {{ new Date(nowTimeMs).toLocaleTimeString('tr-TR') }}</span>
         </div>
-        <h2>🛰️ Canlı Uçuş Radarı & Gerçek Pist İniş Görünümü</h2>
-        <p>Havalimanlarına zoom yaparak pist üzerindeki teker koyma anlarını izleyin</p>
+        <h2>🛰️ Canlı Uçuş Radarı</h2>
+        <p>Uçuşların planlı saatlerine göre hesaplanan tahmini rota konumlarını izleyin</p>
       </div>
 
       <div class="header-controls">
@@ -361,6 +339,16 @@ const selectFlight = (flight: FlightResponse) => {
 
       <!-- SIDEBAR: SELECTED FLIGHT TELEMETRY CARD -->
       <div class="telemetry-sidebar">
+        <div v-if="airportsWithoutCoordinates.length > 0" class="coordinate-alert">
+          <strong>Haritada gösterilmeyen havalimanları:</strong>
+          {{ airportsWithoutCoordinates.map((airport) => airport.airportIataCode).join(', ') }}.
+          Bu kayıtların koordinatları radar kataloğunda bulunmuyor.
+        </div>
+
+        <div v-if="airborneFlightsWithoutCoordinates.length > 0" class="coordinate-alert">
+          {{ airborneFlightsWithoutCoordinates.length }} havadaki uçuş, rota havalimanı koordinatı eksik olduğu için haritada gösterilemiyor.
+        </div>
+
         <!-- ALERT BANNER WHEN NO AIRBORNE FLIGHTS IN REAL TIME -->
         <div v-if="activeFlightsOnMap.length === 0" class="no-departed-alert">
           <div class="alert-icon">⏰</div>
@@ -652,6 +640,16 @@ const selectFlight = (flight: FlightResponse) => {
   margin: 8px 0 0 0;
   font-size: 12px;
   color: #78350f;
+  line-height: 1.5;
+}
+
+.coordinate-alert {
+  padding: 12px 14px;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  border-radius: 10px;
+  color: #9a3412;
+  font-size: 12px;
   line-height: 1.5;
 }
 

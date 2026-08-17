@@ -28,13 +28,13 @@ const router = createRouter({
           path: 'dashboard',
           name: 'dashboard',
           component: DashboardView,
-          meta: { title: 'Operasyon Paneli' }
+          meta: { title: 'Operasyon Paneli', roles: ['ADMIN', 'OPERATIONS'] }
         },
         {
           path: 'flights',
           name: 'flights',
           component: FlightsView,
-          meta: { title: 'Uçuş Yönetimi' }
+          meta: { title: 'Uçuş Yönetimi', roles: ['ADMIN', 'OPERATIONS'] }
         },
         {
           path: 'reference-data',
@@ -52,13 +52,13 @@ const router = createRouter({
           path: 'archive',
           name: 'archive',
           component: ArchiveView,
-          meta: { title: 'Uçuş Arşivi' }
+          meta: { title: 'Uçuş Arşivi', roles: ['ADMIN', 'OPERATIONS', 'BI_ANALYST'] }
         },
         {
           path: 'radar',
           name: 'radar',
           component: () => import('@/views/LiveRadarView.vue'),
-          meta: { title: 'Canlı Uçuş Radarı' }
+          meta: { title: 'Canlı Uçuş Radarı', roles: ['ADMIN', 'OPERATIONS'] }
         },
         {
           path: 'monitoring',
@@ -73,20 +73,23 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   const token = localStorage.getItem('accessToken')
+  const authStore = useAuthStore()
 
   if (to.meta.requiresAuth && !token) {
-    return '/login'
+    return {
+      path: '/login',
+      query: { redirect: to.fullPath }
+    }
   }
 
-  if (to.path === '/login' && token) {
-    return '/dashboard'
+  if (to.path === '/login' && token && authStore.defaultRoute !== '/login') {
+    return authStore.defaultRoute
   }
 
   if (to.meta.roles && Array.isArray(to.meta.roles)) {
-    const authStore = useAuthStore()
     const hasPermission = to.meta.roles.some((r) => authStore.hasRole(r))
     if (!hasPermission) {
-      return '/dashboard'
+      return authStore.defaultRoute
     }
   }
 })

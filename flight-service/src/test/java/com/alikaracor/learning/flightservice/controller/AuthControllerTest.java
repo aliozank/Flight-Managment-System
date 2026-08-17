@@ -72,4 +72,18 @@ class AuthControllerTest {
                         .content(invalidJson))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    @DisplayName("POST /api/auth/logout - Geçerli token ile 204 No Content dönmeli ve authService.logout çağrılmalıdır")
+    void logout_shouldReturn204_andInvokeAuthService() throws Exception {
+        java.time.Instant now = java.time.Instant.now();
+        java.time.Instant expiresAt = now.plusSeconds(3600);
+
+        mockMvc.perform(post("/api/auth/logout")
+                        .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt()
+                                .jwt(builder -> builder.jti("test-jti-uuid").expiresAt(expiresAt))))
+                .andExpect(status().isNoContent());
+
+        org.mockito.Mockito.verify(authService).logout("test-jti-uuid", expiresAt);
+    }
 }

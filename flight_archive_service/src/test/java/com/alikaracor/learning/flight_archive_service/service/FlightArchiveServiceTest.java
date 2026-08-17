@@ -113,8 +113,8 @@ class FlightArchiveServiceTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = FlightStatus.class, names = {"SCHEDULED", "BOARDING", "DEPARTED"})
-    @DisplayName("archiveFlight - Final olmayan statüler (SCHEDULED, BOARDING, DEPARTED) kaydedilmemelidir")
+    @EnumSource(value = FlightStatus.class, names = {"SCHEDULED", "DELAYED", "DEPARTED"})
+    @DisplayName("archiveFlight - Final olmayan statüler (SCHEDULED, DELAYED, DEPARTED) kaydedilmemelidir")
     void archiveFlight_shouldNotSave_whenEventStatusIsNotFinal(FlightStatus nonFinalStatus) {
         sampleEvent.setFlightStatus(nonFinalStatus);
         when(flightArchiveRepository.existsByEventId(sampleEvent.getEventId())).thenReturn(false);
@@ -255,5 +255,60 @@ class FlightArchiveServiceTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
                 .isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("archiveFlight - null flightId durumunda IllegalArgumentException fırlatılmalıdır")
+    void archiveFlight_shouldThrowException_whenFlightIdIsNull() {
+        sampleEvent.setFlightId(null);
+        assertThatThrownBy(() -> flightArchiveService.archiveFlight(sampleEvent))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Flight event identity/status fields are missing");
+    }
+
+    @Test
+    @DisplayName("archiveFlight - null eventId durumunda IllegalArgumentException fırlatılmalıdır")
+    void archiveFlight_shouldThrowException_whenEventIdIsNull() {
+        sampleEvent.setEventId(null);
+        assertThatThrownBy(() -> flightArchiveService.archiveFlight(sampleEvent))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Flight event identity/status fields are missing");
+    }
+
+    @Test
+    @DisplayName("archiveFlight - null flightStatus durumunda IllegalArgumentException fırlatılmalıdır")
+    void archiveFlight_shouldThrowException_whenFlightStatusIsNull() {
+        sampleEvent.setFlightStatus(null);
+        assertThatThrownBy(() -> flightArchiveService.archiveFlight(sampleEvent))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Flight event identity/status fields are missing");
+    }
+
+    @Test
+    @DisplayName("archiveFlight - null flightVersion durumunda IllegalArgumentException fırlatılmalıdır")
+    void archiveFlight_shouldThrowException_whenFlightVersionIsNull() {
+        sampleEvent.setFlightVersion(null);
+        assertThatThrownBy(() -> flightArchiveService.archiveFlight(sampleEvent))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Flight event identity/status fields are missing");
+    }
+
+    @Test
+    @DisplayName("archiveFlight - flightVersion < 1 durumunda IllegalArgumentException fırlatılmalıdır")
+    void archiveFlight_shouldThrowException_whenFlightVersionIsLessThanOne() {
+        sampleEvent.setFlightVersion(0);
+        assertThatThrownBy(() -> flightArchiveService.archiveFlight(sampleEvent))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Flight event identity/status fields are missing");
+    }
+
+    @Test
+    @DisplayName("archiveFlight - ARRIVED statüsünde null flightNumber varsa IllegalArgumentException fırlatılmalıdır")
+    void archiveFlight_shouldThrowException_whenFlightNumberIsNullAndStatusIsArrived() {
+        sampleEvent.setFlightStatus(FlightStatus.ARRIVED);
+        sampleEvent.setFlightNumber(null);
+        assertThatThrownBy(() -> flightArchiveService.archiveFlight(sampleEvent))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Final flight event contains missing archive fields");
     }
 }

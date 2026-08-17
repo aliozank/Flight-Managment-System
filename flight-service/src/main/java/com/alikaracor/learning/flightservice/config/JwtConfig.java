@@ -1,12 +1,12 @@
 package com.alikaracor.learning.flightservice.config;
 
+import com.alikaracor.learning.flightservice.security.RevokedTokenValidator;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtEncoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.jwt.*;
 
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
@@ -27,11 +27,21 @@ public class JwtConfig {
                 .build();
     }
 
+
     @Bean
-    public JwtDecoder jwtDecoder() {
-        return NimbusJwtDecoder
+    public JwtDecoder jwtDecoder(RevokedTokenValidator revokedTokenValidator) {
+
+        NimbusJwtDecoder jwtDecoder = NimbusJwtDecoder
                 .withPublicKey(publicKey)
                 .build();
+
+        OAuth2TokenValidator<Jwt> defaultValidator = JwtValidators.createDefaultWithIssuer("flight-service");
+
+        OAuth2TokenValidator<Jwt> combinedValidator = new DelegatingOAuth2TokenValidator<>(defaultValidator, revokedTokenValidator);
+
+        jwtDecoder.setJwtValidator(combinedValidator);
+
+        return jwtDecoder;
     }
 
 }

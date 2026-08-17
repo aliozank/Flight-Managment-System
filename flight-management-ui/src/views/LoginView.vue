@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/authStore'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 
 const loading = ref(false)
@@ -28,9 +29,14 @@ const handleLogin = async () => {
       userPassword: loginForm.userPassword
     })
     loginSuccess.value = true
-    ElMessage.success('Yetkilendirme Başarılı! Uçuş Kontrol Merkezine Bağlanılıyor...')
+    ElMessage.success('Yetkilendirme başarılı, uygun panele yönlendiriliyorsunuz...')
     setTimeout(async () => {
-      await router.push('/dashboard')
+      const requestedRoute = typeof route.query.redirect === 'string'
+        && route.query.redirect.startsWith('/')
+        && route.query.redirect !== '/login'
+        ? route.query.redirect
+        : authStore.defaultRoute
+      await router.push(requestedRoute)
     }, 600)
   } catch {
     // Interceptor notification handles error messages

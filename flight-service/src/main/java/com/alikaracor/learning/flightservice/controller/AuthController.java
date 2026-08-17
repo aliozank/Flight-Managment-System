@@ -5,10 +5,10 @@ import com.alikaracor.learning.flightservice.dto.LoginRequest;
 import com.alikaracor.learning.flightservice.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -25,8 +25,13 @@ public class AuthController {
         return authService.authenticate(loginRequest, httpServletRequest.getRemoteAddr());
     }
 
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void logout(@AuthenticationPrincipal Jwt jwt) {
 
+        authService.logout(jwt.getId(), jwt.getExpiresAt());
 
+    }
 
 
 }
