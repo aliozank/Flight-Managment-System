@@ -4,6 +4,7 @@ import com.alikaracor.learning.flightservice.event.FlightEvent;
 import com.alikaracor.learning.flightservice.event.FlightEventType;
 import com.alikaracor.learning.flightservice.mapper.FlightMapper;
 import com.alikaracor.learning.flightservice.model.Flight;
+import com.alikaracor.learning.flightservice.service.OutboxService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -27,7 +28,7 @@ import static org.mockito.Mockito.when;
 class FlightEventPublisherTest {
 
     @Mock
-    private KafkaTemplate<String, FlightEvent> kafkaTemplate;
+    private OutboxService outboxService;
 
     @Mock
     private FlightMapper flightMapper;
@@ -39,25 +40,14 @@ class FlightEventPublisherTest {
 
     @BeforeEach
     void setUp() {
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.initSynchronization();
-        }
-
         sampleFlight = new Flight();
         sampleFlight.setFlightId(100L);
         sampleFlight.setFlightNumber("TK1234");
     }
 
-    @AfterEach
-    void tearDown() {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.clearSynchronization();
-        }
-    }
-
     @Test
-    @DisplayName("publish - Transaction commit edildikten sonra (afterCommit) Kafka'ya doğru parametrelerle mesaj göndermelidir")
-    void publish_shouldSendKafkaMessage_afterTransactionCommit() {
+    @DisplayName("publish - FlightEvent oluşturup outboxService.saveFlightEvent metoduna iletmelidir")
+    void publish_shouldSaveEventToOutboxService() {
         FlightEvent baseEvent = new FlightEvent();
         when(flightMapper.toFlightEvent(sampleFlight)).thenReturn(baseEvent);
 
@@ -66,18 +56,8 @@ class FlightEventPublisherTest {
 
         flightEventPublisher.publish(sampleFlight, eventType, actorUserId);
 
-        assertThat(TransactionSynchronizationManager.getSynchronizations()).hasSize(1);
-
-        for (TransactionSynchronization sync : TransactionSynchronizationManager.getSynchronizations()) {
-            sync.afterCommit();
-        }
-
         ArgumentCaptor<FlightEvent> eventCaptor = ArgumentCaptor.forClass(FlightEvent.class);
-        verify(kafkaTemplate).send(
-                eq("flight.events"),
-                eq("100"),
-                eventCaptor.capture()
-        );
+        verify(outboxService).saveFlightEvent(eventCaptor.capture());
 
         FlightEvent capturedEvent = eventCaptor.getValue();
         assertThat(capturedEvent).isNotNull();

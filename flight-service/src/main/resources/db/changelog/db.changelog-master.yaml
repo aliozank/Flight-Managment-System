@@ -25,3 +25,10 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/changes/009-add-flight-status-scheduler-indexes.xml
+
+  - include:
+      file: db/changelog/changes/010-create-outbox-events.xml
+
+  - include:
+      file: db/changelog/changes/011-create-shedlock-table.xml
+

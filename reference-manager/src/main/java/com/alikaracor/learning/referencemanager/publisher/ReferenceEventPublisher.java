@@ -1,42 +1,22 @@
+
 package com.alikaracor.learning.referencemanager.publisher;
 
 import com.alikaracor.learning.referencemanager.event.ReferenceEvent;
-import org.springframework.kafka.core.KafkaTemplate;
+import com.alikaracor.learning.referencemanager.service.OutboxService;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Component
 public class ReferenceEventPublisher {
 
-   private static final String Topic_Name = "reference.events";
+    private final OutboxService outboxService;
 
-   private final KafkaTemplate<String, ReferenceEvent> kafkaTemplate;
+    public ReferenceEventPublisher(OutboxService outboxService) {
+        this.outboxService = outboxService;
+    }
 
-   public ReferenceEventPublisher(KafkaTemplate<String, ReferenceEvent> kafkaTemplate) {
-      this.kafkaTemplate = kafkaTemplate;
-   }
+    public void publish(ReferenceEvent referenceEvent) {
 
+        outboxService.saveReferenceEvent(referenceEvent);
 
-   public void publish(ReferenceEvent referenceEvent) {
-
-      if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-         kafkaTemplate.send(Topic_Name, referenceEvent);
-         return;
-      }
-
-      TransactionSynchronizationManager.registerSynchronization(
-
-              new TransactionSynchronization() {
-
-                 @Override
-                 public void afterCommit() {
-
-                    kafkaTemplate.send(Topic_Name, referenceEvent);
-
-                 }
-
-              }
-      );
-   }
+    }
 }

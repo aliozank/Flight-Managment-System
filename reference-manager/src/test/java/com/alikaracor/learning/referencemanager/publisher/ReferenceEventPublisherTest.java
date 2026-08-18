@@ -13,15 +13,15 @@ import static org.mockito.Mockito.verify;
 class ReferenceEventPublisherTest {
 
     @Mock
-    private KafkaTemplate<String, ReferenceEvent> kafkaTemplate;
+    private com.alikaracor.learning.referencemanager.service.OutboxService outboxService;
 
     @Test
-    void shouldSendReferenceEventToReferenceEventsTopic() {
-        ReferenceEventPublisher publisher = new ReferenceEventPublisher(kafkaTemplate);
+    void shouldSaveReferenceEventToOutboxService() {
+        ReferenceEventPublisher publisher = new ReferenceEventPublisher(outboxService);
         ReferenceEvent event = new ReferenceEvent();
 
         publisher.publish(event);
 
-        verify(kafkaTemplate).send("reference.events", event);
+        verify(outboxService).saveReferenceEvent(event);
     }
 }

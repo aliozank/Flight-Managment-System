@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
 
 @SpringJUnitConfig(ReferenceEventKafkaIntegrationTest.TestConfig.class)
 @EmbeddedKafka(partitions = 1, topics = "reference.events")
@@ -75,7 +76,13 @@ class ReferenceEventKafkaIntegrationTest {
             expected.setResourceId(42L);
             expected.setOccurredAt(Instant.now());
 
-            ReferenceEventPublisher publisher = new ReferenceEventPublisher(kafkaTemplate);
+            com.alikaracor.learning.referencemanager.service.OutboxService outboxService = org.mockito.Mockito.mock(com.alikaracor.learning.referencemanager.service.OutboxService.class);
+            org.mockito.Mockito.doAnswer(invocation -> {
+                kafkaTemplate.send("reference.events", expected);
+                return null;
+            }).when(outboxService).saveReferenceEvent(any());
+
+            ReferenceEventPublisher publisher = new ReferenceEventPublisher(outboxService);
             publisher.publish(expected);
             kafkaTemplate.flush();
 

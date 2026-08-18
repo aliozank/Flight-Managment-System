@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-5.0.xsd">
+
+    <changeSet id="007-1" author="alikaracor">
+        <createTable tableName="outbox_events">
+            <column name="outbox_id" type="VARCHAR(36)">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="event_id" type="VARCHAR(36)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uk_ref_outbox_event_id"/>
+            </column>
+            <column name="aggregate_type" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="aggregate_id" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="event_type" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="topic_name" type="VARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="payload" type="LONGTEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="attempt_count" type="INT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="DATETIME(6)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="next_attempt_at" type="DATETIME(6)"/>
+            <column name="published_at" type="DATETIME(6)"/>
+            <column name="last_error" type="VARCHAR(500)"/>
+        </createTable>
+
+        <createIndex indexName="idx_ref_outbox_status_next_attempt" tableName="outbox_events">
+            <column name="status"/>
+            <column name="next_attempt_at"/>
+            <column name="created_at"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

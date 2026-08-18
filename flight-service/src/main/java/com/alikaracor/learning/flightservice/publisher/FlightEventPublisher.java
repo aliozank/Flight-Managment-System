@@ -4,6 +4,7 @@ import com.alikaracor.learning.flightservice.event.FlightEvent;
 import com.alikaracor.learning.flightservice.event.FlightEventType;
 import com.alikaracor.learning.flightservice.mapper.FlightMapper;
 import com.alikaracor.learning.flightservice.model.Flight;
+import com.alikaracor.learning.flightservice.service.OutboxService;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -15,11 +16,11 @@ import java.util.UUID;
 @Component
 public class FlightEventPublisher {
 
-    private final KafkaTemplate<String, FlightEvent> kafkaTemplate;
+    private final OutboxService outboxService;
     private final FlightMapper flightMapper;
 
-    public FlightEventPublisher(KafkaTemplate<String, FlightEvent> kafkaTemplate, FlightMapper flightMapper) {
-        this.kafkaTemplate = kafkaTemplate;
+    public FlightEventPublisher(OutboxService outboxService, FlightMapper flightMapper) {
+        this.outboxService = outboxService;
         this.flightMapper = flightMapper;
     }
 
@@ -33,22 +34,17 @@ public class FlightEventPublisher {
         newFlightEvent.setChangedByUserId(changedByUserId);
         newFlightEvent.setOccurredAt(Instant.now());
 
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
 
-                    @Override
-                    public void afterCommit() {
-                                                                        //Kayıt başarı ile databaseye gitemzse diye commit olmadan kafkaya mesaj attırmıyor
-                        kafkaTemplate.send(
-                                "flight.events",
-                                flight.getFlightId().toString(),
-                                newFlightEvent
-                        );
-                    }
-                }
-        );
-
+        outboxService.saveFlightEvent(newFlightEvent);
 
     }
 
 
 }
+
+
+
+
+
+
+
