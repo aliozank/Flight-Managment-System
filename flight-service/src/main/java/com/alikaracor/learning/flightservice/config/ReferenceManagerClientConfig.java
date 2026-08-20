@@ -15,11 +15,12 @@ public class ReferenceManagerClientConfig {
 
     @Bean
     public RestClient referenceManagerRestClient(
+            RestClient.Builder restClientBuilder,
             @Value("${app.reference-manager.base-url}")
             String referenceManagerBaseUrl
     ) {
 
-        return RestClient.builder()
+        return restClientBuilder
                 .baseUrl(referenceManagerBaseUrl)
                 .defaultStatusHandler(
                         statusCode -> statusCode.is4xxClientError(),

@@ -41,6 +41,7 @@ import static org.mockito.Mockito.*;
     "spring.cache.type=none",
     "spring.kafka.admin.auto-create=false",
     "spring.kafka.listener.auto-startup=false",
+    "app.outbox.publisher-fixed-delay=1h",
     "ADMIN_USERNAME=admin",
     "ADMIN_EMAIL=admin@flight.com",
     "ADMIN_PASSWORD=adminpass"
@@ -187,5 +188,36 @@ class OutboxChaosIntegrationTest {
         assertThat(frozenEvent.getStatus()).isEqualTo(OutboxStatus.FAILED);
         assertThat(frozenEvent.getAttemptCount()).isEqualTo(5);
         assertThat(frozenEvent.getNextAttemptAt()).isNull(); // Donduruldu!
+    }
+
+    @Test
+    @DisplayName("İşlem sırasında çöken publisher'ın süresi dolmuş claim'i yeniden alınabilmelidir")
+    void staleProcessingClaim_shouldBeRecovered() {
+        OutboxEvent event = new OutboxEvent();
+        event.setOutboxId("stale-outbox-1");
+        event.setEventId("stale-event-1");
+        event.setAggregateType("FLIGHT");
+        event.setAggregateId("77");
+        event.setEventType("UPDATED");
+        event.setTopicName("flight.events");
+        event.setPayload("{\"flightId\":77}");
+        event.setStatus(OutboxStatus.PROCESSING);
+        event.setAttemptCount(0);
+        event.setCreatedAt(Instant.now().minusSeconds(60));
+        event.setLockToken("crashed-publisher");
+        event.setLockedUntil(Instant.now().minusSeconds(1));
+        outboxEventRepository.saveAndFlush(event);
+
+        when(kafkaTemplate.send(anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(null));
+
+        outboxPublisherJob.publishOutboxEvents();
+
+        OutboxEvent recoveredEvent = outboxEventRepository.findById(event.getOutboxId()).orElseThrow();
+        assertThat(recoveredEvent.getStatus()).isEqualTo(OutboxStatus.PUBLISHED);
+        assertThat(recoveredEvent.getPublishedAt()).isNotNull();
+        assertThat(recoveredEvent.getLockToken()).isNull();
+        assertThat(recoveredEvent.getLockedUntil()).isNull();
+        verify(kafkaTemplate, times(1)).send("flight.events", "77", "{\"flightId\":77}");
     }
 }

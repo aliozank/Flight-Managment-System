@@ -6,11 +6,11 @@ COPY .mvn .mvn
 COPY mvnw pom.xml ./
 
 RUN chmod +x mvnw
-RUN ./mvnw dependency:go-offline
 
 COPY src src
 
-RUN ./mvnw clean package -DskipTests
+RUN --mount=type=cache,id=flight-management-maven,target=/root/.m2,sharing=locked \
+    ./mvnw -B clean package -DskipTests
 
 FROM eclipse-temurin:17-jre-jammy
 

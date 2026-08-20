@@ -55,4 +55,10 @@ public class OutboxEvent {
     @Column(name = "last_error", length = 500)
     private String lastError;
 
+    @Column(name = "lock_token", length = 36)
+    private String lockToken;
+
+    @Column(name = "locked_until")
+    private Instant lockedUntil;
+
 }

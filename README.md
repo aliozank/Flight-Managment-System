@@ -7,6 +7,7 @@
 ![Vue.js](https://img.shields.io/badge/Vue.js-3-4FC08D?logo=vuedotjs&logoColor=white)
 ![Kafka](https://img.shields.io/badge/Apache%20Kafka-Event%20Driven-231F20?logo=apachekafka&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+[![CI](https://github.com/aliozank/Flight-Managment-System/actions/workflows/ci.yml/badge.svg)](https://github.com/aliozank/Flight-Managment-System/actions/workflows/ci.yml)
 
 ## Mimari
 
@@ -18,6 +19,9 @@ flowchart LR
     AS["Flight Archive Service"]
     K[("Apache Kafka")]
     R[("Redis")]
+    P["Prometheus"]
+    T["Tempo"]
+    G["Grafana"]
 
     UI -->|reverse proxy| RM
     UI -->|reverse proxy| FS
@@ -31,6 +35,14 @@ flowchart LR
     K --> FS
     K --> AS
     FS -->|WebSocket| UI
+    P -->|Actuator metrikleri| RM
+    P -->|Actuator metrikleri| FS
+    P -->|Actuator metrikleri| AS
+    RM -->|OTLP trace| T
+    FS -->|OTLP trace| T
+    AS -->|OTLP trace| T
+    G --> P
+    G --> T
 ```
 
 Her servis kendi veritabanının sahibidir. Referans sorguları REST, değişiklik bildirimleri Kafka, önbellek ve token iptal kayıtları Redis, canlı UI güncellemeleri ise STOMP/WebSocket üzerinden yürür. UI, Nginx üzerinden servis adlarına reverse proxy yapar; tarayıcı backend portlarını doğrudan bilmez.
@@ -44,7 +56,7 @@ Her servis kendi veritabanının sahibidir. Referans sorguları REST, değişikl
 | `flight_archive_service` | `ARRIVED` ve `CANCELLED` uçuşların idempotent arşivi | `8083` |
 | `flight-management-ui` | Operasyon, referans veri, radar, arşiv, kullanıcı ve izleme ekranları | `5173` |
 
-Altyapı portları: Prometheus `9090`, Grafana `3000`, reference MySQL `3307`, flight MySQL `3308`, archive PostgreSQL `5433`, Redis `6380`, Kafka `9094`.
+Altyapı portları: Prometheus `9090`, Grafana `3000`, Tempo `3200` (API), OTLP `4317`/`4318`, reference MySQL `3307`, flight MySQL `3308`, archive PostgreSQL `5433`, Redis `6380`, Kafka `9094`.
 
 ## Öne çıkan özellikler
 
@@ -57,7 +69,10 @@ Altyapı portları: Prometheus `9090`, Grafana `3000`, reference MySQL `3307`, f
 - Uçuş versiyon geçmişi ve aktivite kayıtları
 - WebSocket ile canlı ve versiyon kontrollü UI güncellemeleri
 - Kafka üzerinden terminal durum arşivleme
-- Prometheus ve Grafana izleme altyapısı
+- Transactional outbox, atomik event claim, retry, lease recovery ve ShedLock ile güvenilir Kafka yayınlama
+- OpenAPI 3 sözleşmeleri ve Swagger UI üzerinden etkileşimli API dokümantasyonu
+- OpenTelemetry, Tempo, Prometheus ve Grafana ile dağıtık izleme ve metrik gözlemlenebilirliği
+- GitHub Actions ile üç backend test paketi, UI build ve Compose doğrulaması
 - Hatalı JSON ve DTO doğrulama istekleri için standart API hata gövdesi
 - Docker Compose ve Nginx ile tek komutla full-stack çalışma
 
@@ -75,6 +90,12 @@ Frontend route korumaları kullanıcı deneyimini düzenler; asıl yetki kontrol
 ## JWT logout ve token revocation
 
 `flight-service` tarafından üretilen her access token benzersiz bir `jti` taşır. `POST /api/auth/logout` çağrısında bu kimlik, token'ın kalan ömrü kadar TTL ile Redis'e kaydedilir. Üç mikroservisin JWT validator'ı aynı blacklist kaydını kontrol ettiği için logout edilen token tüm servislerde anında `401 Unauthorized` ile reddedilir. Süresi dolan kayıt Redis tarafından otomatik kaldırılır.
+
+## Transactional outbox
+
+`flight-service` ve `reference-manager`, iş verisi ile Kafka event'ini aynı veritabanı transaction'ında `outbox_events` tablosuna yazar. Publisher job kayıtları atomik olarak `PROCESSING` durumuna alır, Kafka ACK sonucuna göre `PUBLISHED` veya `FAILED` durumuna geçirir ve başarısız kayıtları gecikmeli olarak yeniden dener. Süresi dolan claim'ler lease mekanizmasıyla geri alınabilir; ShedLock aynı scheduler'ın birden fazla instance üzerinde eş zamanlı çalışmasını engeller. Yedi günden eski başarılı kayıtlar günlük cleanup job'ıyla silinir.
+
+Kafka producer'ları outbox'ta saklanan JSON metnini `StringSerializer` ile doğrudan gönderir. Consumer tarafındaki `eventId` kontrolleri, teslimatın tekrarlandığı durumlarda idempotent davranışı korur.
 
 ## Gereksinimler
 
@@ -123,8 +144,21 @@ Başlıca adresler:
 | UI | `http://localhost:5173` |
 | Grafana | `http://localhost:3000` |
 | Prometheus | `http://localhost:9090` |
+| Flight Service Swagger | `http://localhost:8082/swagger-ui/index.html` |
+| Reference Manager Swagger | `http://localhost:8081/swagger-ui/index.html` |
+| Archive Service Swagger | `http://localhost:8083/swagger-ui/index.html` |
 
 Grafana'nın Compose ortamındaki demo giriş bilgileri `admin` / `admin` şeklindedir; gerçek dağıtım öncesinde değiştirilmelidir.
+
+## API dokümantasyonu
+
+Her backend servisi kendi OpenAPI sözleşmesini `/v3/api-docs` altında, etkileşimli arayüzünü `/swagger-ui/index.html` altında sunar. Korumalı endpoint'leri Swagger UI üzerinden denemek için önce `flight-service` login endpoint'inden token alın, sağ üstteki **Authorize** alanına yalnızca token değerini girin ve isteği çalıştırın.
+
+JSON sözleşmeleri doğrudan şu adreslerden alınabilir:
+
+- `http://localhost:8082/v3/api-docs`
+- `http://localhost:8081/v3/api-docs`
+- `http://localhost:8083/v3/api-docs`
 
 ## Demo referans verileri
 
@@ -176,23 +210,33 @@ Son doğrulanan test durumu:
 
 | Mikroservis | Çalıştırılan | Başarısız | Atlanan | Sonuç |
 | --- | ---: | ---: | ---: | --- |
-| `reference-manager` | 114 | 0 | 0 | `BUILD SUCCESS` |
-| `flight-service` | 152 | 0 | 1 | `BUILD SUCCESS` |
+| `reference-manager` | 121 | 0 | 0 | `BUILD SUCCESS` |
+| `flight-service` | 168 | 0 | 1 | `BUILD SUCCESS` |
 | `flight_archive_service` | 47 | 0 | 0 | `BUILD SUCCESS` |
 
 JWT revocation ayrıca canlı Docker ortamında doğrudan servis portları ve UI Nginx proxy yolları üzerinden doğrulanmıştır: logout öncesinde `200`, logout edilen eski token ile üç serviste `401`, yeni token ile tekrar `200` alınmıştır.
 
-## İzleme
+## Gözlemlenebilirlik
 
-Prometheus üç mikroservisin Actuator metriklerini toplar. Grafana datasource ve `Flight Management Mikroservis Genel Bakış` dashboard'u Compose başladığında otomatik provision edilir. Dashboard; servis erişilebilirliği, istek oranı, HTTP gecikmesi, durum kodları, JVM heap, CPU, thread, bellek ve HikariCP metriklerini gösterir.
+Prometheus üç mikroservisin Actuator metriklerini toplar. Grafana datasource'ları ve `Flight Management Mikroservis Genel Bakış` dashboard'u Compose başladığında otomatik provision edilir. Dashboard; servis erişilebilirliği, istek oranı, HTTP gecikmesi, durum kodları, JVM heap, CPU, thread, bellek ve HikariCP metriklerini gösterir.
 
-## Mevcut teknik borçlar
+Üç backend servisi trace verilerini OTLP/HTTP ile Tempo'ya gönderir. W3C trace context sayesinde `flight-service` tarafından `reference-manager`a yapılan REST çağrıları ve Kafka producer/consumer akışları aynı dağıtık trace üzerinde takip edilebilir. Grafana'da **Explore → Tempo** seçilerek uçuş oluşturma, güncelleme, silme, arşivleme ve Kafka event zincirleri incelenebilir. Actuator, scheduler ve parent'sız altyapı span'leri arama sonuçlarını kirletmemesi için filtrelenir. Tempo trace'leri yerel ortamda 24 saat saklar.
+
+## Sürekli entegrasyon
+
+`.github/workflows/ci.yml` workflow'u `main` branch'ine gönderilen commit'lerde ve pull request'lerde otomatik çalışır. Pipeline:
+
+- Üç mikroservisin Maven testlerini ayrı matrix job'larında çalıştırır.
+- Vue uygulamasında TypeScript kontrolü ve production build gerçekleştirir.
+- `docker compose config -q` ile Compose söz dizimini doğrular.
+
+Workflow durumu README başındaki **CI** rozeti üzerinden görülebilir.
+
+## Kapsam dışında bırakılanlar
 
 - Server-side pagination ve gelişmiş filtreleme
-- Kafka yayınlarında tam DB–event atomikliği için transactional outbox
-- OpenAPI/Swagger API dokümantasyonu
 - UI component ve uçtan uca test kapsamı
-- CI/CD ve production deployment yapılandırması
+- Production secrets yönetimi, TLS ve uzak ortama otomatik deployment
 
 ## Yazar
 

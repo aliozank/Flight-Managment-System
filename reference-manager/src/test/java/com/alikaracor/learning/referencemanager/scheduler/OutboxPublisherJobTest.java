@@ -7,22 +7,19 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Pageable;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -34,13 +31,18 @@ class OutboxPublisherJobTest {
     @Mock
     private KafkaTemplate<String, String> kafkaTemplate;
 
-    @InjectMocks
     private OutboxPublisherJob outboxPublisherJob;
-
     private OutboxEvent pendingEvent;
 
     @BeforeEach
     void setUp() {
+        outboxPublisherJob = new OutboxPublisherJob(
+                outboxEventRepository,
+                kafkaTemplate,
+                Duration.ofSeconds(1),
+                Duration.ofSeconds(5)
+        );
+
         pendingEvent = new OutboxEvent();
         pendingEvent.setOutboxId(UUID.randomUUID().toString());
         pendingEvent.setEventId(UUID.randomUUID().toString());
@@ -55,48 +57,70 @@ class OutboxPublisherJobTest {
     }
 
     @Test
-    @DisplayName("publishOutboxEvents - Kafka gönderimi başarılı olduğunda outbox kaydını PUBLISHED yapmalıdır")
-    void publishOutboxEvents_shouldMarkAsPublished_whenKafkaSendSucceeds() {
-        when(outboxEventRepository.findAllByStatusOrderByCreatedAtAsc(eq(OutboxStatus.PENDING), any(Pageable.class)))
-                .thenReturn(List.of(pendingEvent));
-        when(outboxEventRepository.findAllByStatusAndNextAttemptAtLessThanEqualOrderByCreatedAtAsc(eq(OutboxStatus.FAILED), any(Instant.class), any(Pageable.class)))
-                .thenReturn(List.of());
-
-        CompletableFuture<SendResult<String, String>> future = CompletableFuture.completedFuture(null);
-        when(kafkaTemplate.send("reference.events", "10", "{\"resourceId\":10}")).thenReturn(future);
+    @DisplayName("Kafka ACK geldiğinde claim edilen reference event PUBLISHED yapılmalıdır")
+    void shouldMarkClaimedEventAsPublishedWhenKafkaAcknowledges() {
+        stubClaimableEvent();
+        when(kafkaTemplate.send("reference.events", "10", "{\"resourceId\":10}"))
+                .thenReturn(CompletableFuture.completedFuture(null));
+        when(outboxEventRepository.markPublished(
+                eq(pendingEvent.getOutboxId()), anyString(), any(Instant.class),
+                eq(OutboxStatus.PROCESSING), eq(OutboxStatus.PUBLISHED)
+        )).thenReturn(1);
 
         outboxPublisherJob.publishOutboxEvents();
 
-        ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
-        verify(outboxEventRepository).save(captor.capture());
-
-        OutboxEvent saved = captor.getValue();
-        assertThat(saved.getStatus()).isEqualTo(OutboxStatus.PUBLISHED);
-        assertThat(saved.getPublishedAt()).isNotNull();
-        assertThat(saved.getLastError()).isNull();
+        verify(outboxEventRepository).markPublished(
+                eq(pendingEvent.getOutboxId()), anyString(), any(Instant.class),
+                eq(OutboxStatus.PROCESSING), eq(OutboxStatus.PUBLISHED)
+        );
     }
 
     @Test
-    @DisplayName("publishOutboxEvents - Kafka gönderimi başarısız olduğunda attemptCount artırmalı ve FAILED yapmalıdır")
-    void publishOutboxEvents_shouldHandleFailure_whenKafkaSendFails() {
-        when(outboxEventRepository.findAllByStatusOrderByCreatedAtAsc(eq(OutboxStatus.PENDING), any(Pageable.class)))
-                .thenReturn(List.of(pendingEvent));
-        when(outboxEventRepository.findAllByStatusAndNextAttemptAtLessThanEqualOrderByCreatedAtAsc(eq(OutboxStatus.FAILED), any(Instant.class), any(Pageable.class)))
-                .thenReturn(List.of());
-
-        CompletableFuture<SendResult<String, String>> future = new CompletableFuture<>();
-        future.completeExceptionally(new RuntimeException("Kafka Broker Down"));
-        when(kafkaTemplate.send("reference.events", "10", "{\"resourceId\":10}")).thenReturn(future);
+    @DisplayName("Kafka hatasında reference event retry edilebilir FAILED yapılmalıdır")
+    void shouldMarkClaimedEventAsFailedWhenKafkaSendFails() {
+        stubClaimableEvent();
+        CompletableFuture<SendResult<String, String>> failedFuture = new CompletableFuture<>();
+        failedFuture.completeExceptionally(new RuntimeException("Kafka Broker Down"));
+        when(kafkaTemplate.send("reference.events", "10", "{\"resourceId\":10}"))
+                .thenReturn(failedFuture);
+        when(outboxEventRepository.markFailed(
+                eq(pendingEvent.getOutboxId()), anyString(), eq(1), any(Instant.class),
+                eq("Kafka Broker Down"), eq(OutboxStatus.PROCESSING), eq(OutboxStatus.FAILED)
+        )).thenReturn(1);
 
         outboxPublisherJob.publishOutboxEvents();
 
-        ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
-        verify(outboxEventRepository).save(captor.capture());
+        verify(outboxEventRepository).markFailed(
+                eq(pendingEvent.getOutboxId()), anyString(), eq(1), any(Instant.class),
+                eq("Kafka Broker Down"), eq(OutboxStatus.PROCESSING), eq(OutboxStatus.FAILED)
+        );
+    }
 
-        OutboxEvent saved = captor.getValue();
-        assertThat(saved.getStatus()).isEqualTo(OutboxStatus.FAILED);
-        assertThat(saved.getAttemptCount()).isEqualTo(1);
-        assertThat(saved.getNextAttemptAt()).isNotNull();
-        assertThat(saved.getLastError()).contains("Kafka Broker Down");
+    @Test
+    @DisplayName("Atomik claim kaybedilirse reference event Kafka'ya gönderilmemelidir")
+    void shouldNotPublishWhenAtomicClaimFails() {
+        when(outboxEventRepository.findClaimableEvents(
+                eq(OutboxStatus.PENDING), eq(OutboxStatus.FAILED), eq(OutboxStatus.PROCESSING),
+                any(Instant.class), any(Pageable.class)
+        )).thenReturn(List.of(pendingEvent));
+        when(outboxEventRepository.claimEvent(
+                eq(pendingEvent.getOutboxId()), anyString(), any(Instant.class), any(Instant.class),
+                eq(OutboxStatus.PENDING), eq(OutboxStatus.FAILED), eq(OutboxStatus.PROCESSING)
+        )).thenReturn(0);
+
+        outboxPublisherJob.publishOutboxEvents();
+
+        verifyNoInteractions(kafkaTemplate);
+    }
+
+    private void stubClaimableEvent() {
+        when(outboxEventRepository.findClaimableEvents(
+                eq(OutboxStatus.PENDING), eq(OutboxStatus.FAILED), eq(OutboxStatus.PROCESSING),
+                any(Instant.class), any(Pageable.class)
+        )).thenReturn(List.of(pendingEvent));
+        when(outboxEventRepository.claimEvent(
+                eq(pendingEvent.getOutboxId()), anyString(), any(Instant.class), any(Instant.class),
+                eq(OutboxStatus.PENDING), eq(OutboxStatus.FAILED), eq(OutboxStatus.PROCESSING)
+        )).thenReturn(1);
     }
 }

@@ -14,11 +14,11 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.serializer.JacksonJsonDeserializer;
-import org.springframework.kafka.support.serializer.JacksonJsonSerializer;
 import org.springframework.kafka.test.EmbeddedKafkaBroker;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.kafka.test.utils.KafkaTestUtils;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -26,7 +26,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.any;
 
 @SpringJUnitConfig(ReferenceEventKafkaIntegrationTest.TestConfig.class)
 @EmbeddedKafka(partitions = 1, topics = "reference.events")
@@ -40,15 +39,15 @@ class ReferenceEventKafkaIntegrationTest {
     private EmbeddedKafkaBroker embeddedKafkaBroker;
 
     @Test
-    void shouldPublishAndConsumeReferenceEventAsJson() {
+    void shouldPublishStoredOutboxJsonAndConsumeReferenceEvent() throws Exception {
         Map<String, Object> producerProperties = KafkaTestUtils.producerProps(embeddedKafkaBroker);
-        DefaultKafkaProducerFactory<String, ReferenceEvent> producerFactory =
+        DefaultKafkaProducerFactory<String, String> producerFactory =
                 new DefaultKafkaProducerFactory<>(
                         producerProperties,
                         new StringSerializer(),
-                        new JacksonJsonSerializer<>()
+                        new StringSerializer()
                 );
-        KafkaTemplate<String, ReferenceEvent> kafkaTemplate = new KafkaTemplate<>(producerFactory);
+        KafkaTemplate<String, String> kafkaTemplate = new KafkaTemplate<>(producerFactory);
 
         Map<String, Object> consumerProperties = KafkaTestUtils.consumerProps(
                 embeddedKafkaBroker,
@@ -76,14 +75,10 @@ class ReferenceEventKafkaIntegrationTest {
             expected.setResourceId(42L);
             expected.setOccurredAt(Instant.now());
 
-            com.alikaracor.learning.referencemanager.service.OutboxService outboxService = org.mockito.Mockito.mock(com.alikaracor.learning.referencemanager.service.OutboxService.class);
-            org.mockito.Mockito.doAnswer(invocation -> {
-                kafkaTemplate.send("reference.events", expected);
-                return null;
-            }).when(outboxService).saveReferenceEvent(any());
+            ObjectMapper objectMapper = new ObjectMapper();
+            String storedOutboxPayload = objectMapper.writeValueAsString(expected);
 
-            ReferenceEventPublisher publisher = new ReferenceEventPublisher(outboxService);
-            publisher.publish(expected);
+            kafkaTemplate.send("reference.events", expected.getResourceId().toString(), storedOutboxPayload).get();
             kafkaTemplate.flush();
 
             ConsumerRecord<String, ReferenceEvent> record = KafkaTestUtils.getSingleRecord(

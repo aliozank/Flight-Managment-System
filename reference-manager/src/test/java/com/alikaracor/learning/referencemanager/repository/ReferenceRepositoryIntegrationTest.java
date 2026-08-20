@@ -10,6 +10,8 @@ import com.alikaracor.learning.referencemanager.model.AirlineStatus;
 import com.alikaracor.learning.referencemanager.model.Airport;
 import com.alikaracor.learning.referencemanager.model.AirportStatus;
 import com.alikaracor.learning.referencemanager.model.FlightTypeStatus;
+import com.alikaracor.learning.referencemanager.model.OutboxEvent;
+import com.alikaracor.learning.referencemanager.model.OutboxStatus;
 import com.alikaracor.learning.referencemanager.model.Route;
 import com.alikaracor.learning.referencemanager.model.RouteStatus;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
+
+import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -54,6 +58,9 @@ class ReferenceRepositoryIntegrationTest {
 
     @Autowired
     private FlightTypeRepository flightTypeRepository;
+
+    @Autowired
+    private OutboxEventRepository outboxEventRepository;
 
     @Test
     void shouldRunLiquibaseAndLoadDefaultFlightTypes() {
@@ -145,6 +152,63 @@ class ReferenceRepositoryIntegrationTest {
                 DataIntegrityViolationException.class,
                 () -> routeRepository.saveAndFlush(route(origin, destination))
         );
+    }
+
+    @Test
+    void shouldClaimOutboxEventOnlyOnceAndProtectClaimOwnership() {
+        OutboxEvent event = new OutboxEvent();
+        event.setOutboxId("claim-outbox-1");
+        event.setEventId("claim-event-1");
+        event.setAggregateType("AIRLINE");
+        event.setAggregateId("42");
+        event.setEventType("UPDATED");
+        event.setTopicName("reference.events");
+        event.setPayload("{\"referenceId\":42}");
+        event.setStatus(OutboxStatus.PENDING);
+        event.setCreatedAt(Instant.now());
+        outboxEventRepository.saveAndFlush(event);
+
+        Instant now = Instant.now();
+        int firstClaim = outboxEventRepository.claimEvent(
+                event.getOutboxId(),
+                "publisher-1",
+                now.plusSeconds(30),
+                now,
+                OutboxStatus.PENDING,
+                OutboxStatus.FAILED,
+                OutboxStatus.PROCESSING
+        );
+        int secondClaim = outboxEventRepository.claimEvent(
+                event.getOutboxId(),
+                "publisher-2",
+                now.plusSeconds(30),
+                now,
+                OutboxStatus.PENDING,
+                OutboxStatus.FAILED,
+                OutboxStatus.PROCESSING
+        );
+
+        assertEquals(1, firstClaim);
+        assertEquals(0, secondClaim);
+        assertEquals(0, outboxEventRepository.markPublished(
+                event.getOutboxId(),
+                "publisher-2",
+                Instant.now(),
+                OutboxStatus.PROCESSING,
+                OutboxStatus.PUBLISHED
+        ));
+        assertEquals(1, outboxEventRepository.markPublished(
+                event.getOutboxId(),
+                "publisher-1",
+                Instant.now(),
+                OutboxStatus.PROCESSING,
+                OutboxStatus.PUBLISHED
+        ));
+
+        OutboxEvent publishedEvent = outboxEventRepository.findById(event.getOutboxId()).orElseThrow();
+        assertEquals(OutboxStatus.PUBLISHED, publishedEvent.getStatus());
+        assertNull(publishedEvent.getLockToken());
+        assertNull(publishedEvent.getLockedUntil());
     }
 
     private Airline airline(String name, String iata, String icao) {

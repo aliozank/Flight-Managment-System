@@ -1,0 +1,86 @@
+name: CI
+
+on:
+    push:
+      branches:
+        - main
+    pull_request:
+      branches:
+        - main
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+jobs:
+    backend-tests:
+      name: Backend - ${{ matrix.service }}
+      runs-on: ubuntu-latest
+      timeout-minutes: 20
+
+      strategy:
+        fail-fast: false
+        matrix:
+          service:
+            - reference-manager
+            - flight-service
+            - flight_archive_service
+
+      steps:
+        - name: Repository'yi indir
+          uses: actions/checkout@v7
+
+        - name: Java 17 kur
+          uses: actions/setup-java@v5
+          with:
+            distribution: temurin
+            java-version: "17"
+            cache: maven
+            cache-dependency-path: ${{ matrix.service }}/pom.xml
+
+        - name: Backend testlerini çalıştır
+          working-directory: ${{ matrix.service }}
+          run: ./mvnw test
+
+    ui-build:
+      name: UI Build
+      runs-on: ubuntu-latest
+      timeout-minutes: 10
+
+      steps:
+        - name: Repository'yi indir
+          uses: actions/checkout@v7
+
+        - name: Node.js kur
+          uses: actions/setup-node@v6
+          with:
+            node-version: "22.18.0"
+            cache: npm
+            cache-dependency-path: flight-management-ui/package-lock.json
+
+        - name: UI bağımlılıklarını kur
+          working-directory: flight-management-ui
+          run: npm ci
+
+        - name: UI type-check ve production build
+          working-directory: flight-management-ui
+          run: npm run build
+
+    compose-config:
+      name: Docker Compose Config
+      runs-on: ubuntu-latest
+      timeout-minutes: 5
+
+      env:
+        MYSQL_ROOT_PASSWORD: ci_mysql_password
+        POSTGRES_PASSWORD: ci_postgres_password
+        ADMIN_USERNAME: ci_admin
+        ADMIN_EMAIL: ci-admin@example.com
+        ADMIN_PASSWORD: ci_admin_password
+
+      steps:
+        - name: Repository'yi indir
+          uses: actions/checkout@v7
+
+        - name: Compose dosyasını doğrula
+          run: docker compose config -q

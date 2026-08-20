@@ -27,6 +27,7 @@ import org.testcontainers.mysql.MySQLContainer;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -40,6 +41,7 @@ import static org.mockito.Mockito.*;
     "spring.cache.type=none",
     "spring.kafka.admin.auto-create=false",
     "spring.kafka.listener.auto-startup=false",
+    "app.outbox.publisher-fixed-delay=1h",
     "ADMIN_USERNAME=admin",
     "ADMIN_EMAIL=admin@flight.com",
     "ADMIN_PASSWORD=adminpass"
@@ -159,5 +161,63 @@ class OutboxIntegrationTest {
 
         assertThat(flightRepository.count()).isEqualTo(0);
         assertThat(outboxEventRepository.count()).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("Aynı outbox kaydı eş zamanlı olarak yalnızca bir publisher tarafından claim edilebilmelidir")
+    void claimEvent_shouldGrantOwnershipOnlyOnce() {
+        OutboxEvent event = new OutboxEvent();
+        event.setOutboxId("claim-outbox-1");
+        event.setEventId("claim-event-1");
+        event.setAggregateType("FLIGHT");
+        event.setAggregateId("42");
+        event.setEventType("CREATED");
+        event.setTopicName("flight.events");
+        event.setPayload("{\"flightId\":42}");
+        event.setStatus(OutboxStatus.PENDING);
+        event.setCreatedAt(Instant.now());
+        outboxEventRepository.saveAndFlush(event);
+
+        Instant now = Instant.now();
+        int firstClaim = outboxEventRepository.claimEvent(
+                event.getOutboxId(),
+                "publisher-1",
+                now.plusSeconds(30),
+                now,
+                OutboxStatus.PENDING,
+                OutboxStatus.FAILED,
+                OutboxStatus.PROCESSING
+        );
+        int secondClaim = outboxEventRepository.claimEvent(
+                event.getOutboxId(),
+                "publisher-2",
+                now.plusSeconds(30),
+                now,
+                OutboxStatus.PENDING,
+                OutboxStatus.FAILED,
+                OutboxStatus.PROCESSING
+        );
+
+        assertThat(firstClaim).isEqualTo(1);
+        assertThat(secondClaim).isZero();
+        assertThat(outboxEventRepository.markPublished(
+                event.getOutboxId(),
+                "publisher-2",
+                Instant.now(),
+                OutboxStatus.PROCESSING,
+                OutboxStatus.PUBLISHED
+        )).isZero();
+        assertThat(outboxEventRepository.markPublished(
+                event.getOutboxId(),
+                "publisher-1",
+                Instant.now(),
+                OutboxStatus.PROCESSING,
+                OutboxStatus.PUBLISHED
+        )).isEqualTo(1);
+
+        OutboxEvent publishedEvent = outboxEventRepository.findById(event.getOutboxId()).orElseThrow();
+        assertThat(publishedEvent.getStatus()).isEqualTo(OutboxStatus.PUBLISHED);
+        assertThat(publishedEvent.getLockToken()).isNull();
+        assertThat(publishedEvent.getLockedUntil()).isNull();
     }
 }

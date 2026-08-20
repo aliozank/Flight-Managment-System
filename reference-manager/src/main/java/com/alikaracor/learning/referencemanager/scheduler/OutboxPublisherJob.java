@@ -3,110 +3,151 @@ package com.alikaracor.learning.referencemanager.scheduler;
 import com.alikaracor.learning.referencemanager.model.OutboxEvent;
 import com.alikaracor.learning.referencemanager.model.OutboxStatus;
 import com.alikaracor.learning.referencemanager.repository.OutboxEventRepository;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @Component
 public class OutboxPublisherJob {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(OutboxPublisherJob.class);
+    private static final int BATCH_SIZE = 50;
+    private static final int MAX_ATTEMPTS = 5;
 
     private final OutboxEventRepository outboxEventRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
+    private final Duration kafkaSendTimeout;
+    private final Duration processingLease;
 
-    public OutboxPublisherJob(OutboxEventRepository outboxEventRepository, KafkaTemplate<String, String> kafkaTemplate) {
+    public OutboxPublisherJob(
+            OutboxEventRepository outboxEventRepository,
+            KafkaTemplate<String, String> kafkaTemplate,
+            @Value("${app.outbox.kafka-send-timeout:10s}") Duration kafkaSendTimeout,
+            @Value("${app.outbox.processing-lease:30s}") Duration processingLease
+    ) {
+        if (kafkaSendTimeout.isZero() || kafkaSendTimeout.isNegative()) {
+            throw new IllegalArgumentException("Kafka send timeout must be positive");
+        }
+        if (processingLease.compareTo(kafkaSendTimeout) <= 0) {
+            throw new IllegalArgumentException("Outbox processing lease must be longer than Kafka send timeout");
+        }
+
         this.outboxEventRepository = outboxEventRepository;
         this.kafkaTemplate = kafkaTemplate;
+        this.kafkaSendTimeout = kafkaSendTimeout;
+        this.processingLease = processingLease;
     }
 
-    @Scheduled(fixedDelay = 2000)
+    @Scheduled(fixedDelayString = "${app.outbox.publisher-fixed-delay:2s}")
+    @SchedulerLock(
+            name = "ReferenceOutboxPublisherJob_publishOutboxEvents",
+            lockAtLeastFor = "1s",
+            lockAtMostFor = "10m"
+    )
     public void publishOutboxEvents() {
-
-        List<OutboxEvent> pendingEvents = outboxEventRepository.findAllByStatusOrderByCreatedAtAsc(
+        Instant now = Instant.now();
+        List<OutboxEvent> claimableEvents = outboxEventRepository.findClaimableEvents(
                 OutboxStatus.PENDING,
-                PageRequest.of(0, 50)
-
-        );
-
-        for (OutboxEvent event : pendingEvents) {
-
-            processEvent(event);
-
-        }
-
-        List<OutboxEvent> failedEvents = outboxEventRepository.findAllByStatusAndNextAttemptAtLessThanEqualOrderByCreatedAtAsc(
                 OutboxStatus.FAILED,
-                Instant.now(),
-                PageRequest.of(0, 50)
+                OutboxStatus.PROCESSING,
+                now,
+                PageRequest.of(0, BATCH_SIZE)
         );
 
-        for (OutboxEvent event : failedEvents) {
-
-            processEvent(event);
-
+        for (OutboxEvent event : claimableEvents) {
+            if (!processEvent(event)) {
+                break;
+            }
         }
-
     }
 
-    private void processEvent(OutboxEvent event) {
+    private boolean processEvent(OutboxEvent event) {
+        String lockToken = UUID.randomUUID().toString();
+        Instant now = Instant.now();
+        int claimed = outboxEventRepository.claimEvent(
+                event.getOutboxId(),
+                lockToken,
+                now.plus(processingLease),
+                now,
+                OutboxStatus.PENDING,
+                OutboxStatus.FAILED,
+                OutboxStatus.PROCESSING
+        );
+
+        if (claimed == 0) {
+            return true;
+        }
 
         try {
-            kafkaTemplate.send(event.getTopicName(), event.getAggregateId(), event.getPayload())
-                    .whenComplete((result, ex) -> {
-                        if (ex == null) {
+            kafkaTemplate
+                    .send(event.getTopicName(), event.getAggregateId(), event.getPayload())
+                    .get(kafkaSendTimeout.toMillis(), TimeUnit.MILLISECONDS);
 
-                            event.setStatus(OutboxStatus.PUBLISHED);
-                            event.setPublishedAt(Instant.now());
-                            event.setLastError(null);
+            int updated = outboxEventRepository.markPublished(
+                    event.getOutboxId(),
+                    lockToken,
+                    Instant.now(),
+                    OutboxStatus.PROCESSING,
+                    OutboxStatus.PUBLISHED
+            );
 
-                            outboxEventRepository.save(event);
-                        }
-
-                        else {
-
-                            handleFailure(event, ex);
-
-                        }
-                    });
+            if (updated == 0) {
+                LOGGER.warn("Reference outbox publish ACK arrived after claim ownership changed. EventID: {}", event.getEventId());
+            }
+            return true;
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            handleFailure(event, lockToken, exception);
+            return false;
+        } catch (ExecutionException exception) {
+            Throwable cause = exception.getCause() != null ? exception.getCause() : exception;
+            handleFailure(event, lockToken, cause);
+            return true;
+        } catch (TimeoutException | RuntimeException exception) {
+            handleFailure(event, lockToken, exception);
+            return true;
         }
-
-        catch (Exception ex) {
-
-            handleFailure(event, ex);
-
-        }
-
     }
 
-    private void handleFailure(OutboxEvent event, Throwable ex) {
-
+    private void handleFailure(OutboxEvent event, String lockToken, Throwable exception) {
         int newAttemptCount = event.getAttemptCount() + 1;
-        event.setAttemptCount(newAttemptCount);
-        event.setLastError(ex.getMessage() != null ? ex.getMessage().substring(0, Math.min(ex.getMessage().length(), 500)) : "Unknown Error");
+        Instant nextAttemptAt = newAttemptCount >= MAX_ATTEMPTS
+                ? null
+                : Instant.now().plusSeconds(5L * newAttemptCount);
+        String errorMessage = truncateErrorMessage(exception);
 
-        if (newAttemptCount >= 5) {
+        int updated = outboxEventRepository.markFailed(
+                event.getOutboxId(),
+                lockToken,
+                newAttemptCount,
+                nextAttemptAt,
+                errorMessage,
+                OutboxStatus.PROCESSING,
+                OutboxStatus.FAILED
+        );
 
-            event.setStatus(OutboxStatus.FAILED);
-            event.setNextAttemptAt(null);
-
-            LOGGER.error("Reference outbox event 5 kez denendi fakat yayınlanamadı. EventID: {}", event.getEventId());
+        if (updated == 0) {
+            LOGGER.warn("Reference outbox failure arrived after claim ownership changed. EventID: {}", event.getEventId());
+        } else if (newAttemptCount >= MAX_ATTEMPTS) {
+            LOGGER.error("Reference outbox event reached maximum retry count. EventID: {}", event.getEventId());
         }
+    }
 
-        else {
-
-            event.setStatus(OutboxStatus.FAILED);
-            event.setNextAttemptAt(Instant.now().plusSeconds(5L * newAttemptCount));
-
-        }
-
-        outboxEventRepository.save(event);
-
+    private String truncateErrorMessage(Throwable exception) {
+        String message = exception.getMessage() != null ? exception.getMessage() : "Unknown Error";
+        return message.substring(0, Math.min(message.length(), 500));
     }
 }

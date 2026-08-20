@@ -31,6 +31,13 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/**")
                         .hasAnyRole("ADMIN", "DEVOPS")
 
+                        .requestMatchers(
+                                "/v3/api-docs",
+                                "/v3/api-docs/**",
+                                "/swagger-ui.html",
+                                "/swagger-ui/**"
+                        ).permitAll()
+
                         .anyRequest().authenticated()
                 )
 

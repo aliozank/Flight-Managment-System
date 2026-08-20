@@ -99,6 +99,8 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://tempo:4318/v1/traces
+      TRACING_SAMPLING_PROBABILITY: "1.0"
     depends_on:
       reference-mysql:
         condition: service_healthy
@@ -129,6 +131,8 @@ services:
 
         SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
         APP_REFERENCE_MANAGER_BASE_URL: http://reference-manager:8081
+        OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://tempo:4318/v1/traces
+        TRACING_SAMPLING_PROBABILITY: "1.0"
 
         JWT_PRIVATE_KEY_PATH: /run/secrets/private-key.pem
 
@@ -160,6 +164,8 @@ services:
         SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
         REDIS_HOST: redis
         REDIS_PORT: 6379
+        OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://tempo:4318/v1/traces
+        TRACING_SAMPLING_PROBABILITY: "1.0"
       depends_on:
         archive-postgres:
           condition: service_healthy
@@ -184,6 +190,18 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  tempo:
+    image: grafana/tempo:2.10.7
+    command:
+      - "-config.file=/etc/tempo/tempo.yml"
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo_data:/var/tempo
 
   prometheus:
     image: prom/prometheus:v3.13.0
@@ -212,6 +230,7 @@ services:
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - prometheus
+      - tempo
 
 volumes:
   reference_mysql_data:
@@ -221,3 +240,4 @@ volumes:
   kafka_data:
   prometheus_data:
   grafana_data:
+  tempo_data:

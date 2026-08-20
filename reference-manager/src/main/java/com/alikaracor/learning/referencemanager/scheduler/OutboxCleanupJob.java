@@ -2,6 +2,7 @@ package com.alikaracor.learning.referencemanager.scheduler;
 
 import com.alikaracor.learning.referencemanager.model.OutboxStatus;
 import com.alikaracor.learning.referencemanager.repository.OutboxEventRepository;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -23,6 +24,11 @@ public class OutboxCleanupJob {
     }
 
     @Scheduled(cron = "0 0 3 * * ?")
+    @SchedulerLock(
+            name = "ReferenceOutboxCleanupJob_cleanupPublishedEvents",
+            lockAtLeastFor = "10s",
+            lockAtMostFor = "5m"
+    )
     @Transactional
     public void cleanupPublishedEvents() {
         Instant cutoffTime = Instant.now().minus(7, ChronoUnit.DAYS);
