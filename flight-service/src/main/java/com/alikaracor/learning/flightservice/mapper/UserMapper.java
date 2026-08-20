@@ -45,6 +45,4 @@ public interface UserMapper {
             String accessToken,
             Long expiresIn
     );
-
-    User toEntity(UserResponse userResponse);
 }
