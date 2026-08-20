@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/authStore'
 import { useReferenceStore } from '@/stores/referenceStore'
@@ -19,6 +19,53 @@ const formSaving = ref(false)
 const selectedFlightToEdit = ref<FlightResponse | null>(null)
 const csvModalVisible = ref(false)
 const mockModalVisible = ref(false)
+
+const displayedFlights = computed(() => {
+  const now = Date.now()
+
+  return flightStore.filteredFlights
+    .sort((first, second) => {
+      const getOperationalGroup = (status: FlightStatus): number => {
+        if (status === 'SCHEDULED' || status === 'DELAYED') return 0
+        if (status === 'DEPARTED') return 1
+        return 2
+      }
+
+      const firstGroup = getOperationalGroup(first.flightStatus)
+      const secondGroup = getOperationalGroup(second.flightStatus)
+
+      if (firstGroup !== secondGroup) {
+        return firstGroup - secondGroup
+      }
+
+      if (firstGroup === 0) {
+        const firstDistance = Math.abs(new Date(first.scheduledDepartureAt).getTime() - now)
+        const secondDistance = Math.abs(new Date(second.scheduledDepartureAt).getTime() - now)
+        return firstDistance - secondDistance
+      }
+
+      if (firstGroup === 1) {
+        return new Date(first.scheduledArrivalAt).getTime() - new Date(second.scheduledArrivalAt).getTime()
+      }
+
+      return new Date(second.scheduledDepartureAt).getTime() - new Date(first.scheduledDepartureAt).getTime()
+    })
+})
+
+const paginatedDisplayedFlights = computed(() => {
+  const start = (flightStore.currentPage - 1) * flightStore.pageSize
+  return displayedFlights.value.slice(start, start + flightStore.pageSize)
+})
+
+watch(
+  () => displayedFlights.value.length,
+  (total) => {
+    const lastPage = Math.max(1, Math.ceil(total / flightStore.pageSize))
+    if (flightStore.currentPage > lastPage) {
+      flightStore.currentPage = lastPage
+    }
+  }
+)
 
 onMounted(async () => {
   await Promise.all([
@@ -277,9 +324,16 @@ const handleCancelFlight = (flight: FlightResponse) => {
 
     <!-- Table Card -->
     <el-card shadow="never" class="table-card">
+      <el-alert
+        class="archive-hint"
+        title="Aktif uçuşlar önce, tamamlanan kayıtlar yeniden eskiye gösterilir. Tam geçmiş Arşiv ekranında da korunur."
+        type="info"
+        :closable="false"
+        show-icon
+      />
       <el-table
         v-loading="flightStore.loading"
-        :data="flightStore.paginatedFlights"
+        :data="paginatedDisplayedFlights"
         stripe
         style="width: 100%"
         empty-text="Filtrelere uygun uçuş bulunamadı"
@@ -413,7 +467,7 @@ const handleCancelFlight = (flight: FlightResponse) => {
           v-model:page-size="flightStore.pageSize"
           :page-sizes="[10, 20, 50, 100]"
           layout="total, sizes, prev, pager, next, jumper"
-          :total="flightStore.totalFilteredCount"
+          :total="displayedFlights.length"
         />
       </div>
     </el-card>
@@ -495,6 +549,10 @@ const handleCancelFlight = (flight: FlightResponse) => {
 .table-card {
   border: 1px solid #e2e8f0;
   background-color: #ffffff;
+}
+
+.archive-hint {
+  margin-bottom: 16px;
 }
 
 .flight-number-badge {

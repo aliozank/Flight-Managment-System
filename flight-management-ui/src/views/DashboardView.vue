@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useReferenceStore } from '@/stores/referenceStore'
@@ -10,21 +10,83 @@ const router = useRouter()
 const authStore = useAuthStore()
 const referenceStore = useReferenceStore()
 const flightStore = useFlightStore()
+const currentTime = ref(Date.now())
+let clockInterval: ReturnType<typeof setInterval> | undefined
 
 onMounted(async () => {
+  clockInterval = setInterval(() => {
+    currentTime.value = Date.now()
+  }, 60_000)
+
   await Promise.all([
     referenceStore.fetchAllReferences(),
     flightStore.fetchFlights()
   ])
 })
 
-const totalFlights = computed(() => flightStore.flights.length)
-const scheduledCount = computed(() => flightStore.flights.filter((f) => f.flightStatus === 'SCHEDULED').length)
-const departedCount = computed(() => flightStore.flights.filter((f) => f.flightStatus === 'DEPARTED').length)
-const arrivedCount = computed(() => flightStore.flights.filter((f) => f.flightStatus === 'ARRIVED').length)
-const cancelledCount = computed(() => flightStore.flights.filter((f) => f.flightStatus === 'CANCELLED').length)
+onUnmounted(() => {
+  if (clockInterval) clearInterval(clockInterval)
+})
 
-const recentFlights = computed(() => flightStore.flights.slice(0, 5))
+const todayFlights = computed(() => {
+  const start = new Date(currentTime.value)
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(start)
+  end.setDate(end.getDate() + 1)
+
+  return flightStore.flights.filter((flight) => {
+    const departureTime = new Date(flight.scheduledDepartureAt).getTime()
+    return departureTime >= start.getTime() && departureTime < end.getTime()
+  })
+})
+
+const totalFlights = computed(() => todayFlights.value.length)
+const scheduledCount = computed(() => todayFlights.value.filter(
+  (flight) => flight.flightStatus === 'SCHEDULED' || flight.flightStatus === 'DELAYED'
+).length)
+const departedCount = computed(() => todayFlights.value.filter((f) => f.flightStatus === 'DEPARTED').length)
+const arrivedCount = computed(() => todayFlights.value.filter((f) => f.flightStatus === 'ARRIVED').length)
+const cancelledCount = computed(() => todayFlights.value.filter((f) => f.flightStatus === 'CANCELLED').length)
+
+const todayOperations = computed(() => [...todayFlights.value]
+  .sort((first, second) => {
+    const terminalStatuses = ['ARRIVED', 'CANCELLED']
+    const firstIsTerminal = terminalStatuses.includes(first.flightStatus)
+    const secondIsTerminal = terminalStatuses.includes(second.flightStatus)
+
+    if (firstIsTerminal !== secondIsTerminal) return firstIsTerminal ? 1 : -1
+    if (firstIsTerminal) {
+      return new Date(second.scheduledDepartureAt).getTime() - new Date(first.scheduledDepartureAt).getTime()
+    }
+    return new Date(first.scheduledDepartureAt).getTime() - new Date(second.scheduledDepartureAt).getTime()
+  })
+  .slice(0, 8))
+
+const upcomingFlights = computed(() => {
+  const endTime = currentTime.value + 24 * 60 * 60 * 1000
+
+  return flightStore.flights
+    .filter((flight) => {
+      const departureTime = new Date(flight.scheduledDepartureAt).getTime()
+      const isAwaitingDeparture = flight.flightStatus === 'SCHEDULED' || flight.flightStatus === 'DELAYED'
+      return isAwaitingDeparture && departureTime >= currentTime.value && departureTime <= endTime
+    })
+    .sort((first, second) => (
+      new Date(first.scheduledDepartureAt).getTime() - new Date(second.scheduledDepartureAt).getTime()
+    ))
+    .slice(0, 8)
+})
+
+const formatTimeUntilDeparture = (departureAt: string): string => {
+  const remainingMinutes = Math.max(
+    0,
+    Math.ceil((new Date(departureAt).getTime() - currentTime.value) / 60_000)
+  )
+  const hours = Math.floor(remainingMinutes / 60)
+  const minutes = remainingMinutes % 60
+
+  return hours === 0 ? `${minutes} dk` : `${hours} sa ${minutes} dk`
+}
 
 const goToFlights = () => router.push('/flights')
 </script>
@@ -54,7 +116,7 @@ const goToFlights = () => router.push('/flights')
         <div class="metric-icon-box emerald">✈️</div>
         <div class="metric-info">
           <span class="metric-value">{{ totalFlights }}</span>
-          <span class="metric-label">Toplam Uçuş</span>
+          <span class="metric-label">Bugünkü Uçuş</span>
         </div>
       </div>
 
@@ -62,7 +124,7 @@ const goToFlights = () => router.push('/flights')
         <div class="metric-icon-box cyan">📅</div>
         <div class="metric-info">
           <span class="metric-value">{{ scheduledCount }}</span>
-          <span class="metric-label">Planlanan (Scheduled)</span>
+          <span class="metric-label">Planlanan / Rötarlı</span>
         </div>
       </div>
 
@@ -91,20 +153,21 @@ const goToFlights = () => router.push('/flights')
       </div>
     </div>
 
-    <!-- Recent Flights Overview -->
+    <!-- Today's Flights Overview -->
     <el-card shadow="never" class="overview-card">
       <template #header>
         <div class="card-header">
-          <span>📋 Son Güncellenen Uçuşlar (Realtime Stream)</span>
-          <el-button type="primary" link @click="goToFlights">Tümünü Gör ➔</el-button>
+          <span>📋 Bugünün Uçuş Operasyonu</span>
+          <el-button type="primary" link @click="goToFlights">Tüm Uçuşları Gör ➔</el-button>
         </div>
       </template>
 
       <el-table
         v-loading="flightStore.loading"
-        :data="recentFlights"
+        :data="todayOperations"
         stripe
         style="width: 100%"
+        empty-text="Bugün için uçuş bulunmuyor"
       >
         <el-table-column prop="flightNumber" label="Uçuş No" width="130">
           <template #default="{ row }">
@@ -128,6 +191,55 @@ const goToFlights = () => router.push('/flights')
 
         <el-table-column prop="scheduledDepartureTime" label="STD" width="110" />
         <el-table-column prop="scheduledArrivalTime" label="STA" width="110" />
+
+        <el-table-column label="Durum" width="140">
+          <template #default="{ row }">
+            <StatusTag :status="row.flightStatus" />
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
+    <el-card shadow="never" class="overview-card upcoming-card">
+      <template #header>
+        <div class="card-header">
+          <div class="upcoming-title">
+            <span>⏱️ Önümüzdeki 24 Saatte Kalkacak Uçuşlar</span>
+            <small>Planlanan ve rötarlı uçuşlar, kalkış zamanına göre sıralanır.</small>
+          </div>
+          <el-button type="primary" link @click="goToFlights">Operasyonu Yönet ➔</el-button>
+        </div>
+      </template>
+
+      <el-table
+        v-loading="flightStore.loading"
+        :data="upcomingFlights"
+        stripe
+        style="width: 100%"
+        empty-text="Önümüzdeki 24 saat içinde kalkacak uçuş bulunmuyor"
+      >
+        <el-table-column prop="flightNumber" label="Uçuş No" width="130">
+          <template #default="{ row }">
+            <span class="flight-badge">{{ row.flightNumber }}</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="Güzergah" min-width="230">
+          <template #default="{ row }">
+            {{ referenceStore.getAirportLabel(row.originAirportId) }}
+            ➔
+            {{ referenceStore.getAirportLabel(row.destinationAirportId) }}
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="flightDate" label="Tarih" width="120" />
+        <el-table-column prop="scheduledDepartureTime" label="Kalkış" width="100" />
+
+        <el-table-column label="Kalkışa Kalan" width="140">
+          <template #default="{ row }">
+            <span class="countdown-badge">{{ formatTimeUntilDeparture(row.scheduledDepartureAt) }}</span>
+          </template>
+        </el-table-column>
 
         <el-table-column label="Durum" width="140">
           <template #default="{ row }">
@@ -297,5 +409,31 @@ const goToFlights = () => router.push('/flights')
 .flight-badge {
   font-weight: 800;
   color: #0284c7;
+}
+
+.upcoming-title {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.upcoming-title small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.upcoming-card {
+  border-color: #bae6fd;
+}
+
+.countdown-badge {
+  display: inline-flex;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
 }
 </style>
